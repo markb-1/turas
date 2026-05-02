@@ -1,0 +1,38 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+DerivedData/
+build/
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# API keys — NEVER commit these
+Configuration/*.xcconfig
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Claude Code
+.claude/
+
+# Build scripts (dev-only, not needed at runtime)
+scripts/
+Scripts/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# CocoaPods (not used, but just in case)
+Pods/
