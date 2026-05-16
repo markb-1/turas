@@ -24,6 +24,8 @@ Configuration/*.xcconfig
 
 # Claude Code
 .claude/
+CLAUDE.md
+Change Logs/
 
 # Build scripts (dev-only, not needed at runtime)
 scripts/
