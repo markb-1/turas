@@ -4,12 +4,14 @@ A real-time public transport tracker for iOS, covering bus, Luas, and rail servi
 
 ## Features
 
-- **Live vehicle positions** on the map for buses and trains, refreshed every 30 seconds
-- **Real-time arrival predictions** at any stop, combining scheduled times with live delay data
+- **Live vehicle positions** on the map for buses, Luas and trains, refreshed every 30 seconds
+- **Real-time arrival predictions** at any stop, combining scheduled times with live delay data; the stop sheet refreshes every 30 seconds and supports pull to refresh
 - **Per-mode filtering** — switch between Bus, Luas, and Train
-- **Route search** across 378 routes nationwide with directional headsigns
+- **Route search** across every route nationwide with directional headsigns; route names shared by two operators (e.g. 220) show the operator
+- **Starred and recent routes** one tap away in search
 - **Nearest-stop detection** with walking-time estimates
-- **Offline-friendly** map rendering — bundled GTFS static data means stops and routes draw instantly
+- **VoiceOver support** for the map, search and arrivals
+- **Offline-friendly** — route lists and stops are cached for a week, with bundled GTFS data as a fallback, so routes and stops draw instantly
 
 ## Architecture
 
@@ -27,7 +29,7 @@ A real-time public transport tracker for iOS, covering bus, Luas, and rail servi
                                 └──────────────────┘
 ```
 
-The iOS app does no direct transit-API integration. All polling, parsing, rate-limit handling, and arrival-time calculation happens on the [Turas-Server](https://github.com/markb-1/turas-server) backend. The app simply consumes a small JSON API.
+The iOS app does no direct transit-API integration. All polling, parsing, rate-limit handling, and arrival-time calculation happens on the [Turas-Server](https://github.com/markb-1/turas-server) backend. The app simply consumes a small JSON API: vehicles, arrivals, and the route and stop lists (cached on the device for 7 days). Route shapes are bundled because the server does not serve them.
 
 This keeps the app:
 - Tiny (single HTTP client, no protobuf parser on-device)
@@ -40,7 +42,7 @@ This keeps the app:
 - **UI:** SwiftUI, MapKit (`Map` + `Annotation`)
 - **Min iOS:** 17.0
 - **Dependencies:** none
-- **Project tool:** [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `project.yml` is the source of truth
+- **Project tool:** [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `project.yml` is the source of truth; `Turas.xcodeproj` is generated and not committed
 
 ## Building from source
 
@@ -88,18 +90,38 @@ This keeps the app:
 
 ### App Transport Security note
 
-The default xcconfig assumes HTTPS. If your server is HTTP-only (e.g. local development), the `${TURAS_SERVER_HOST}` ATS exception in `Info.plist` will allow it. For App Store submission, use HTTPS.
+The default xcconfig assumes HTTPS. For local development against an HTTP-only server, Debug builds carry an ATS exception for `$(TURAS_SERVER_HOST)` (`Supporting/Info-Debug.plist`). Release builds (`Supporting/Info.plist`) have no exception, so the Release server must use HTTPS. Set `TURAS_SERVER_HOST` to the host name only so the exception matches, and put any port in `TURAS_SERVER_URL` (e.g. `http:/$()/$(TURAS_SERVER_HOST):8080`).
+
+### Missing configuration
+
+A Debug build without `TURAS_SERVER_URL` / `TURAS_SERVER_API_KEY` stops at launch with a message pointing here. A Release build shows a "Server not configured" screen instead of crashing.
+
+## Tests
+
+```bash
+xcodegen generate
+xcodebuild test -project Turas.xcodeproj -scheme Turas \
+  -destination 'platform=iOS Simulator,name=iPhone 16'
+```
+
+The `TurasTests` unit tests cover distance and mode helpers, the bundled stop search, search matching and direction options, configuration parsing, the server client (through a `URLProtocol` stub), the static-data cache, favourites, VoiceOver text, and decoding of the server's golden JSON in `TurasTests/Fixtures/` (byte-identical copies of the server's `testdata/contract/`).
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the tests on every push and pull request on macOS, with placeholder xcconfig files.
 
 ## Project structure
 
 ```
 Turas/
 ├── Config.swift              # xcconfig → runtime values
-├── Models/                   # Decodable structs (Vehicle, StopArrival, RouteStop, …)
-├── Services/                 # LocationService, TurasServerService, bundled-data loaders
-├── ViewModels/MapViewModel   # 30s polling, vehicle filtering
+├── Formatting.swift          # arrival and VoiceOver text
+├── Models/                   # Vehicle, StopArrival, RouteStop, RouteRef, TransitRoute, …
+├── Services/                 # TurasServerService, StaticDataStore, LocationService,
+│                             # FavouritesStore, bundled-data loaders
+├── ViewModels/MapViewModel   # selection state machine, 30s polling, vehicle filtering
 ├── Views/                    # SwiftUI views (Map, annotations, sheets, search bar)
 └── Resources/                # Bundled GTFS static JSON (stops, shapes, lookups)
+Supporting/                   # Info.plist (Release) and Info-Debug.plist
+TurasTests/                   # unit tests and contract fixtures
 ```
 
 ## Acknowledgements
