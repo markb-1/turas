@@ -12,37 +12,22 @@ targets:
     platform: iOS
     sources:
       - path: Turas
-    info:
-      path: Turas/Resources/Info.plist
-      properties:
-        CFBundleDisplayName: Turas
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
-        UILaunchScreen:
-          UIColorName: ""
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
-        TURAS_SERVER_URL: $(TURAS_SERVER_URL)
-        TURAS_SERVER_API_KEY: $(TURAS_SERVER_API_KEY)
-        NSAppTransportSecurity:
-          NSExceptionDomains:
-            ${TURAS_SERVER_HOST}:
-              NSExceptionAllowsInsecureHTTPLoads: true
-        NSLocationWhenInUseUsageDescription: Turas uses your location to centre the map and show nearby buses.
     settings:
       base:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
+        # Info.plist is maintained by hand, one per configuration, so the
+        # App Transport Security exception for a plain-HTTP development
+        # server ($(TURAS_SERVER_HOST)) exists in Debug builds only.
+        # Keep the two files identical apart from NSAppTransportSecurity.
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          INFOPLIST_FILE: Supporting/Info-Debug.plist
         Release:
           SWIFT_COMPILATION_MODE: wholemodule
+          INFOPLIST_FILE: Supporting/Info.plist
     configFiles:
       Debug: Configuration/Debug.xcconfig
       Release: Configuration/Release.xcconfig
