@@ -22,12 +22,53 @@ final class TurasServerServiceTests: XCTestCase {
     func testFetchArrivalsQuery() async throws {
         StubURLProtocol.stub.set(body: try Fixture.data("arrivals"))
 
-        let arrivals = try await makeService().fetchArrivals(stopId: "8220DB000002", routeName: "39A", direction: 1)
+        let arrivals = try await makeService().fetchArrivals(
+            stopId: "8220DB000002",
+            route: RouteRef(name: "39A"),
+            direction: 1
+        )
 
         XCTAssertEqual(arrivals.count, 3)
         let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
         XCTAssertEqual(url.path, "/api/v1/arrivals")
-        XCTAssertEqual(url.query, "stop_id=8220DB000002&route=39A&direction=1")
+        XCTAssertEqual(url.query, "stop_id=8220DB000002&route=39A&direction=1", "no agency parameter when unknown")
+    }
+
+    func testFetchArrivalsSendsAgency() async throws {
+        StubURLProtocol.stub.set(body: Data("[]".utf8))
+
+        _ = try await makeService().fetchArrivals(
+            stopId: "C1",
+            route: RouteRef(name: "220", agencyId: "5401"),
+            direction: 0
+        )
+
+        let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
+        XCTAssertEqual(url.query, "stop_id=C1&route=220&direction=0&agency=5401")
+    }
+
+    func testFetchRoutes() async throws {
+        StubURLProtocol.stub.set(body: try Fixture.data("routes"))
+
+        let routes = try await makeService().fetchRoutes(mode: .bus)
+
+        XCTAssertEqual(routes.map(\.id), ["5249|220", "5401|220", "5249|447"])
+        let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
+        XCTAssertEqual(url.absoluteString, "https://turas.test/api/v1/routes?mode=bus")
+    }
+
+    func testFetchStopsQuery() async throws {
+        StubURLProtocol.stub.set(body: try Fixture.data("stops"))
+        let service = makeService()
+
+        let stops = try await service.fetchStops(route: "220", agency: "5401", direction: 0)
+        XCTAssertEqual(stops.count, 2)
+        var url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.last?.url)
+        XCTAssertEqual(url.query, "route=220&direction=0&agency=5401")
+
+        _ = try await service.fetchStops(route: "39A", agency: nil, direction: 1)
+        url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.last?.url)
+        XCTAssertEqual(url.query, "route=39A&direction=1")
     }
 
     func testNullBodyIsEmptyList() async throws {

@@ -1,7 +1,7 @@
-import SwiftUI
 import MapKit
+import SwiftUI
 
-/// The root view — a full-screen map with live bus annotations.
+/// The root view — a full-screen map with live vehicle annotations.
 ///
 /// Key SwiftUI concepts:
 /// - `@StateObject`: Creates and owns the ViewModel. Use this in the view
@@ -14,14 +14,18 @@ struct ContentView: View {
     @StateObject private var viewModel: MapViewModel
     @Environment(\.scenePhase) private var scenePhase
     private let serverService: TurasServerService
+    private let favourites: FavouritesStore
 
     init(dependencies: AppDependencies) {
         self.serverService = dependencies.serverService
+        self.favourites = dependencies.favourites
         _viewModel = StateObject(wrappedValue: MapViewModel(
             serverService: dependencies.serverService,
             locationService: dependencies.locationService,
             routeShapeService: dependencies.routeShapeService,
-            routeStopService: dependencies.routeStopService
+            routeStopService: dependencies.routeStopService,
+            staticData: dependencies.staticData,
+            favourites: dependencies.favourites
         ))
     }
 
@@ -37,7 +41,7 @@ struct ContentView: View {
                 errorOverlay(error)
             }
 
-            RouteSearchBar(viewModel: viewModel)
+            RouteSearchBar(viewModel: viewModel, favourites: favourites)
         }
         .onAppear { viewModel.onAppear() }
         .onChange(of: scenePhase) { _, phase in
@@ -52,7 +56,7 @@ struct ContentView: View {
             case .stop(let stop):
                 StopDetailSheet(
                     stop: stop,
-                    routeName: viewModel.selectedRouteName ?? "",
+                    route: viewModel.selectedRoute ?? RouteRef(name: ""),
                     direction: viewModel.selectedDirection ?? 0,
                     mode: viewModel.selectedMode,
                     serverService: serverService
@@ -63,9 +67,9 @@ struct ContentView: View {
                 NearbyStopSheet(
                     nearbyStop: nearbyStop,
                     mode: viewModel.selectedMode,
-                    onSelectRoute: { route in
+                    onSelectRoute: { routeName in
                         viewModel.activeSheet = nil
-                        viewModel.selectRoute(route)
+                        viewModel.selectRoute(named: routeName, atStop: nearbyStop.id)
                     }
                 )
                 .presentationDetents([.fraction(0.3), .medium])
@@ -97,6 +101,10 @@ struct ContentView: View {
                         .onTapGesture {
                             viewModel.selectNearbyStop(nearbyStop)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(AccessibilityText.stop(name: nearbyStop.stop.name))
+                        .accessibilityHint("Shows the routes serving this stop")
+                        .accessibilityAddTraits(.isButton)
                 }
                 .annotationTitles(.hidden)
             }
@@ -116,6 +124,10 @@ struct ContentView: View {
                     .onTapGesture {
                         viewModel.selectStop(stop)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(stopAccessibilityLabel(stop))
+                    .accessibilityHint("Shows arrivals at this stop")
+                    .accessibilityAddTraits(.isButton)
                 }
                 .annotationTitles(.hidden)
             }
@@ -129,6 +141,14 @@ struct ContentView: View {
                         .onTapGesture {
                             viewModel.selectVehicle(vehicle)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(AccessibilityText.vehicle(
+                            mode: vehicle.mode,
+                            routeId: vehicle.routeId,
+                            bearing: vehicle.bearing
+                        ))
+                        .accessibilityHint("Shows vehicle details")
+                        .accessibilityAddTraits(.isButton)
                 }
                 .annotationTitles(.hidden) // We show route in our custom view
             }
@@ -142,6 +162,15 @@ struct ContentView: View {
         .ignoresSafeArea(edges: .top)
     }
 
+    private func stopAccessibilityLabel(_ stop: RouteStop) -> String {
+        let isClosest = stop.id == viewModel.closestStop?.id
+        return AccessibilityText.stop(
+            name: stop.name,
+            isNearest: isClosest,
+            walkingMinutes: isClosest ? viewModel.walkingMinutes : nil
+        )
+    }
+
     private var loadingOverlay: some View {
         VStack {
             ProgressView()
@@ -153,6 +182,7 @@ struct ContentView: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
     }
 
     private func errorOverlay(_ message: String) -> some View {
@@ -160,6 +190,7 @@ struct ContentView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.title)
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text("Unable to load data")
                 .font(.headline)
             Text(message)
@@ -169,5 +200,6 @@ struct ContentView: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
     }
 }

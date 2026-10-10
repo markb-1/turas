@@ -34,19 +34,33 @@ final class MapViewModelTests: XCTestCase {
 
     // MARK: - Search
 
+    private func route(_ name: String, _ agency: String = "5249") -> TransitRoute {
+        TransitRoute(name: name, agencyId: agency)
+    }
+
     func testUniqueMatch() {
-        let routes = ["139", "39", "39A", "46A", "Red"]
-        XCTAssertEqual(MapViewModel.uniqueMatch(for: "39a", in: routes), "39A", "case-insensitive exact match")
-        XCTAssertEqual(MapViewModel.uniqueMatch(for: "39", in: routes), "39", "exact match wins over partial ones")
-        XCTAssertEqual(MapViewModel.uniqueMatch(for: "46", in: routes), "46A", "single partial match")
-        XCTAssertEqual(MapViewModel.uniqueMatch(for: " red ", in: routes), "Red", "whitespace trimmed")
+        let routes = [route("139"), route("39"), route("39A"), route("46A"), route("Red", "5242")]
+        XCTAssertEqual(MapViewModel.uniqueMatch(for: "39a", in: routes)?.name, "39A", "case-insensitive exact match")
+        XCTAssertEqual(MapViewModel.uniqueMatch(for: "39", in: routes)?.name, "39", "exact match wins over partial ones")
+        XCTAssertEqual(MapViewModel.uniqueMatch(for: "46", in: routes)?.name, "46A", "single partial match")
+        XCTAssertEqual(MapViewModel.uniqueMatch(for: " red ", in: routes)?.name, "Red", "whitespace trimmed")
         XCTAssertNil(MapViewModel.uniqueMatch(for: "3", in: routes), "ambiguous")
         XCTAssertNil(MapViewModel.uniqueMatch(for: "", in: routes))
         XCTAssertNil(MapViewModel.uniqueMatch(for: "999", in: routes))
     }
 
-    func testUniqueMatchRejectsDuplicateExactNames() {
-        XCTAssertNil(MapViewModel.uniqueMatch(for: "220", in: ["220", "220"]))
+    func testUniqueMatchWithTwoAgenciesStaysInSearch() {
+        let routes = [route("220", "5249"), route("220", "5401"), route("220A")]
+        XCTAssertNil(MapViewModel.uniqueMatch(for: "220", in: routes))
+        XCTAssertEqual(MapViewModel.uniqueMatch(for: "220a", in: routes)?.agencyId, "5249")
+    }
+
+    func testTransitRouteLookup() {
+        let routes = [route("220", "5249"), route("220", "5401"), route("39A")]
+        XCTAssertEqual(MapViewModel.transitRoute(for: RouteRef(name: "220", agencyId: "5401"), in: routes)?.agencyId, "5401")
+        XCTAssertNil(MapViewModel.transitRoute(for: RouteRef(name: "220"), in: routes), "ambiguous without agency")
+        XCTAssertEqual(MapViewModel.transitRoute(for: RouteRef(name: "39A"), in: routes)?.name, "39A")
+        XCTAssertNil(MapViewModel.transitRoute(for: RouteRef(name: "220", agencyId: "9999"), in: routes))
     }
 
     // MARK: - Directions
@@ -74,11 +88,13 @@ final class MapViewModelTests: XCTestCase {
     // MARK: - Selection
 
     func testRouteSelectionAccessors() {
-        XCTAssertNil(RouteSelection.idle.routeName)
+        let route = RouteRef(name: "39A", agencyId: "5249")
+        XCTAssertNil(RouteSelection.idle.route)
         XCTAssertNil(RouteSelection.idle.direction)
-        XCTAssertEqual(RouteSelection.route("39A").routeName, "39A")
-        XCTAssertNil(RouteSelection.route("39A").direction)
-        XCTAssertEqual(RouteSelection.routeAndDirection("39A", direction: 1).routeName, "39A")
-        XCTAssertEqual(RouteSelection.routeAndDirection("39A", direction: 1).direction, 1)
+        XCTAssertEqual(RouteSelection.route(route).route, route)
+        XCTAssertEqual(RouteSelection.route(route).routeName, "39A")
+        XCTAssertNil(RouteSelection.route(route).direction)
+        XCTAssertEqual(RouteSelection.routeAndDirection(route, direction: 1).route, route)
+        XCTAssertEqual(RouteSelection.routeAndDirection(route, direction: 1).direction, 1)
     }
 }

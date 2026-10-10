@@ -15,6 +15,15 @@ enum TransportMode: String, CaseIterable, Identifiable, Codable, Sendable {
         return .bus
     }
 
+    /// The agency prefix of a raw GTFS route_id ("5249_119681" -> "5249"),
+    /// or nil when it has none.
+    static func agencyId(fromRawRouteId rawRouteId: String) -> String? {
+        guard let underscore = rawRouteId.firstIndex(of: "_"), underscore != rawRouteId.startIndex else {
+            return nil
+        }
+        return String(rawRouteId[..<underscore])
+    }
+
     var label: String {
         switch self {
         case .bus: return "Bus"

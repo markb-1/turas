@@ -33,11 +33,17 @@ final class AppDependencies {
     let locationService: LocationService
     let routeShapeService: RouteShapeService
     let routeStopService: RouteStopService
+    let staticData: StaticDataStore
+    let favourites: FavouritesStore
 
     init(config: ServerConfig) {
-        self.serverService = TurasServerService(config: config)
+        let serverService = TurasServerService(config: config)
+        let routeStopService = RouteStopService()
+        self.serverService = serverService
         self.locationService = LocationService()
         self.routeShapeService = RouteShapeService()
-        self.routeStopService = RouteStopService()
+        self.routeStopService = routeStopService
+        self.staticData = StaticDataStore(source: serverService, bundledStops: routeStopService)
+        self.favourites = FavouritesStore()
     }
 }

@@ -9,6 +9,7 @@ struct Vehicle: Identifiable, Equatable, Sendable {
     let id: String          // Vehicle ID (Irish Rail: train code)
     let tripId: String      // GTFS trip ID (for ghost bus matching)
     let routeId: String     // Public route name, e.g. "39A", "Green", "DART"
+    let agencyId: String?   // Agency prefix, e.g. "5249"; tells same-named routes apart
     let headsign: String?   // Destination, e.g. "UCD Belfield"
     let direction: Int      // 0 = outbound, 1 = inbound
     let latitude: Double

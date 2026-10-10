@@ -36,15 +36,44 @@ actor TurasServerService {
         return (response ?? []).map(\.vehicle)
     }
 
+    // MARK: - Routes and stops
+
+    /// Fetches the routes for a mode: one entry per (agency, short name).
+    func fetchRoutes(mode: TransportMode) async throws -> [TransitRoute] {
+        let data = try await get("/api/v1/routes", query: [
+            URLQueryItem(name: "mode", value: mode.rawValue),
+        ])
+        return try ServerJSON.decoder.decode([TransitRoute]?.self, from: data) ?? []
+    }
+
+    /// Fetches the ordered stops of a route in one direction. Without an
+    /// agency the server uses the agency running the most trips under that
+    /// short name.
+    func fetchStops(route: String, agency: String?, direction: Int) async throws -> [RouteStop] {
+        var query = [
+            URLQueryItem(name: "route", value: route),
+            URLQueryItem(name: "direction", value: String(direction)),
+        ]
+        if let agency, !agency.isEmpty {
+            query.append(URLQueryItem(name: "agency", value: agency))
+        }
+        let data = try await get("/api/v1/stops", query: query)
+        return try ServerJSON.decoder.decode([RouteStop]?.self, from: data) ?? []
+    }
+
     // MARK: - Arrivals
 
     /// Fetches predicted arrivals for bus/train stops.
-    func fetchArrivals(stopId: String, routeName: String, direction: Int) async throws -> [StopArrival] {
-        let data = try await get("/api/v1/arrivals", query: [
+    func fetchArrivals(stopId: String, route: RouteRef, direction: Int) async throws -> [StopArrival] {
+        var query = [
             URLQueryItem(name: "stop_id", value: stopId),
-            URLQueryItem(name: "route", value: routeName),
+            URLQueryItem(name: "route", value: route.name),
             URLQueryItem(name: "direction", value: String(direction)),
-        ])
+        ]
+        if let agency = route.agencyId {
+            query.append(URLQueryItem(name: "agency", value: agency))
+        }
+        let data = try await get("/api/v1/arrivals", query: query)
         let response = try ServerJSON.decoder.decode([ServerStopArrival]?.self, from: data)
         return (response ?? []).map(\.stopArrival)
     }
@@ -100,6 +129,17 @@ actor TurasServerService {
     }
 }
 
+// MARK: - Static data source
+
+/// Where StaticDataStore gets routes and stops. TurasServerService in the
+/// app; a fake in tests.
+protocol StaticDataSource: Sendable {
+    func fetchRoutes(mode: TransportMode) async throws -> [TransitRoute]
+    func fetchStops(route: String, agency: String?, direction: Int) async throws -> [RouteStop]
+}
+
+extension TurasServerService: StaticDataSource {}
+
 // MARK: - Server JSON Models
 
 /// Matches the server's Vehicle JSON (see the server's internal/model).
@@ -107,6 +147,7 @@ struct ServerVehicle: Decodable, Equatable {
     let id: String
     let tripId: String
     let route: String
+    let agencyId: String?
     let headsign: String?
     let direction: Int
     let lat: Double
@@ -118,6 +159,7 @@ struct ServerVehicle: Decodable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id
         case tripId = "trip_id"
+        case agencyId = "agency_id"
         case route, headsign, direction, lat, lon, bearing, timestamp, mode
     }
 
@@ -126,6 +168,7 @@ struct ServerVehicle: Decodable, Equatable {
             id: id,
             tripId: tripId,
             routeId: route,
+            agencyId: agencyId,
             headsign: headsign,
             direction: direction,
             latitude: lat,

@@ -18,4 +18,13 @@ enum GeoUtils {
         let y = dLat
         return R * sqrt(x * x + y * y)
     }
+
+    /// Eight-point compass name ("north", "south-east", ...) for a bearing
+    /// in degrees clockwise from north.
+    static func compassDirection(forBearing bearing: Double) -> String {
+        let names = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
+        let normalized = (bearing.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+        let index = Int((normalized + 22.5) / 45) % names.count
+        return names[index]
+    }
 }
