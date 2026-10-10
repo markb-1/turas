@@ -162,6 +162,7 @@ final class MapViewModel: ObservableObject {
     private var pollingTask: Task<Void, Never>?
     private var detailsTask: Task<Void, Never>?
     private var nearbyTask: Task<Void, Never>?
+    private var routeListsTask: Task<Void, Never>?
     private var hasAppeared = false
 
     private static let logger = Logger(subsystem: "com.turas", category: "MapViewModel")
@@ -214,20 +215,7 @@ final class MapViewModel: ObservableObject {
             await stops.preload()
         }
 
-        // Cached or bundled route lists now, then a background refresh from
-        // the server when the cache is older than 7 days.
-        Task { [weak self, store = staticData] in
-            for mode in TransportMode.allCases {
-                let routes = await store.routes(for: mode)
-                self?.routesByMode[mode] = routes
-            }
-            let changed = await store.refreshRoutesIfStale()
-            for mode in changed {
-                let routes = await store.routes(for: mode)
-                self?.routesByMode[mode] = routes
-            }
-            self?.refreshDirectionOptions()
-        }
+        refreshRouteLists()
 
         Task {
             if let location = await locationService.requestLocation() {
@@ -242,6 +230,27 @@ final class MapViewModel: ObservableObject {
         }
     }
 
+    /// Loads the cached or bundled route lists, then refreshes any list
+    /// whose cache is older than 7 days from the server. Cheap when the
+    /// cache is fresh, so it also runs each time the app becomes active
+    /// (e.g. after a launch while the server was still starting).
+    private func refreshRouteLists() {
+        guard routeListsTask == nil else { return }
+        routeListsTask = Task { [weak self, store = staticData] in
+            for mode in TransportMode.allCases {
+                let routes = await store.routes(for: mode)
+                self?.routesByMode[mode] = routes
+            }
+            let changed = await store.refreshRoutesIfStale()
+            for mode in changed {
+                let routes = await store.routes(for: mode)
+                self?.routesByMode[mode] = routes
+            }
+            self?.refreshDirectionOptions()
+            self?.routeListsTask = nil
+        }
+    }
+
     /// Stops polling in the background and resumes it when the app becomes
     /// active again with a route selected. The root view never disappears,
     /// so the scene phase is the only reliable signal.
@@ -250,6 +259,9 @@ final class MapViewModel: ObservableObject {
         case .active:
             if selection.routeName != nil {
                 startPolling()
+            }
+            if hasAppeared {
+                refreshRouteLists()
             }
         case .background:
             stopPolling()
