@@ -3,13 +3,54 @@ import MapKit
 import os
 import SwiftUI
 
-/// Drives the main map screen — manages vehicle positions, polling, and map camera.
+/// What the user has selected on the map. This is the single source of
+/// truth for the screen's state; `searchText` only backs the text field.
 ///
-/// Selection state machine:
-/// 1. No route (idle): searchText empty → show nearby stops, NO polling
-/// 2. Route selected, no direction: searchText set → start polling, show vehicles + direction picker
-/// 3. Route + direction selected: selectedDirection set → filter to direction, show stops
-/// 4. Route cleared: back to idle → stop polling, show nearby stops
+/// - `idle`: no route. Nearby stops are shown and nothing is polled.
+/// - `route`: a route is chosen. Vehicles are polled, both directions'
+///   shapes are drawn and the direction picker is shown.
+/// - `routeAndDirection`: vehicles, the shape and the stops are filtered to
+///   one direction.
+enum RouteSelection: Equatable {
+    case idle
+    case route(String)
+    case routeAndDirection(String, direction: Int)
+
+    var routeName: String? {
+        switch self {
+        case .idle:
+            return nil
+        case .route(let name), .routeAndDirection(let name, _):
+            return name
+        }
+    }
+
+    var direction: Int? {
+        if case .routeAndDirection(_, let direction) = self {
+            return direction
+        }
+        return nil
+    }
+}
+
+/// One choice in the direction picker. Routes without a headsign still get
+/// an entry ("Direction 0") so they are never a dead end.
+struct DirectionOption: Identifiable, Equatable {
+    let direction: Int
+    let headsign: String?
+
+    var id: Int { direction }
+
+    var title: String {
+        if let headsign, !headsign.isEmpty {
+            return "To \(headsign)"
+        }
+        return "Direction \(direction)"
+    }
+}
+
+/// Drives the main map screen: selection state, vehicle polling and the
+/// map camera.
 @MainActor
 final class MapViewModel: ObservableObject {
     // MARK: - Published state
@@ -20,67 +61,53 @@ final class MapViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     // Search & filter state
-    @Published var selectedMode: TransportMode = .bus
+    @Published private(set) var selection: RouteSelection = .idle
+    @Published private(set) var selectedMode: TransportMode = .bus
+    /// Text typed into the search field. Not the selection: see `selection`.
     @Published var searchText: String = ""
     @Published var isSearchActive: Bool = false
-    @Published var selectedDirection: Int?
-    @Published var activeRouteShapes: [RouteShape] = []
-    @Published var activeRouteStops: [RouteStop] = []
+    @Published private(set) var directionOptions: [DirectionOption] = []
+    @Published private(set) var activeRouteShapes: [RouteShape] = []
+    @Published private(set) var activeRouteStops: [RouteStop] = []
 
     // Nearby stops (idle state — no route selected)
-    @Published var nearbyStops: [NearbyStop] = []
+    @Published private(set) var nearbyStops: [NearbyStop] = []
 
     // Closest stop to user's location
-    @Published var closestStop: RouteStop?
-    @Published var walkingMinutes: Int?
+    @Published private(set) var closestStop: RouteStop?
+    @Published private(set) var walkingMinutes: Int?
 
     /// Single sheet state — avoids SwiftUI two-sheet conflict.
     @Published var activeSheet: SheetContent?
 
+    var selectedRouteName: String? { selection.routeName }
+    var selectedDirection: Int? { selection.direction }
+
     /// Vehicles to display — only shown when a route is selected.
     var displayedVehicles: [Vehicle] {
-        guard !searchText.isEmpty else { return [] }
-        let routeFiltered = vehicles.filter { $0.mode == selectedMode && $0.routeId == searchText }
-        guard let dir = selectedDirection else { return routeFiltered }
-        return routeFiltered.filter { $0.direction == dir }
+        guard let routeName = selection.routeName else { return [] }
+        let onRoute = vehicles.filter { $0.mode == selectedMode && $0.routeId == routeName }
+        guard let direction = selection.direction else { return onRoute }
+        return onRoute.filter { $0.direction == direction }
     }
 
-    /// Unique route IDs for the selected mode, filtered by search text.
-    /// Merges live vehicle routes with static route data so routes are
-    /// always discoverable even without active vehicles in the feed.
+    /// Route names for the selected mode matching the search text
+    /// (case-insensitive). Merges live vehicle routes with the static route
+    /// list so routes are discoverable without vehicles in the feed.
     var availableRoutes: [String] {
         var routes = Set(vehicles.filter { $0.mode == selectedMode }.map(\.routeId))
         if let staticRoutes = staticRoutesByMode[selectedMode] {
             routes.formUnion(staticRoutes)
         }
         let sorted = routes.sorted()
-        guard !searchText.isEmpty else { return sorted }
-        return sorted.filter { $0.localizedCaseInsensitiveContains(searchText) }
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return sorted }
+        return sorted.filter { $0.localizedCaseInsensitiveContains(query) }
     }
 
     /// Route-aware color — uses Luas line-specific colours when applicable.
     var activeRouteColor: Color {
-        selectedMode.routeColor(for: searchText)
-    }
-
-    /// Live vehicle positions keyed by trip_id (for distance-based ETA + ghost detection).
-    var liveVehiclePositions: [String: (lat: Double, lon: Double, direction: Int, routeId: String)] {
-        var dict: [String: (lat: Double, lon: Double, direction: Int, routeId: String)] = [:]
-        for v in vehicles {
-            dict[v.tripId] = (v.coordinate.latitude, v.coordinate.longitude, v.direction, v.routeId)
-        }
-        return dict
-    }
-
-    /// Destination names for each direction of the selected route.
-    var directionLabels: [(direction: Int, label: String)] {
-        guard !searchText.isEmpty else { return [] }
-        let shapes = routeShapeService.shapes(for: searchText)
-        let directions = Set(shapes.map(\.direction)).sorted()
-        return directions.compactMap { dir in
-            guard let label = headsignLookup["\(searchText)_\(dir)"] else { return nil }
-            return (direction: dir, label: label)
-        }
+        selectedMode.routeColor(for: selection.routeName ?? "")
     }
 
     // MARK: - Services
@@ -92,7 +119,13 @@ final class MapViewModel: ObservableObject {
     private let headsignLookup: [String: String]
     /// All known route short names grouped by mode (from static route_lookup.json).
     private let staticRoutesByMode: [TransportMode: Set<String>]
+
+    /// All shapes for the selected route (both directions).
+    private var routeShapes: [RouteShape] = []
     private var pollingTask: Task<Void, Never>?
+    private var detailsTask: Task<Void, Never>?
+    private var nearbyTask: Task<Void, Never>?
+    private var hasAppeared = false
 
     private static let logger = Logger(subsystem: "com.turas", category: "MapViewModel")
 
@@ -135,10 +168,16 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Lifecycle
 
+    /// Called once when the map first appears.
     func onAppear() {
-        // Resume polling only if a route was selected (e.g. returning from background)
-        if !searchText.isEmpty {
-            startPolling()
+        guard !hasAppeared else { return }
+        hasAppeared = true
+
+        // Decode the bundled shapes and stops off the main thread now, so
+        // the first route tap does not hitch.
+        Task.detached(priority: .utility) { [shapes = routeShapeService, stops = routeStopService] in
+            await shapes.preload()
+            await stops.preload()
         }
 
         Task {
@@ -154,8 +193,20 @@ final class MapViewModel: ObservableObject {
         }
     }
 
-    func onDisappear() {
-        stopPolling()
+    /// Stops polling in the background and resumes it when the app becomes
+    /// active again with a route selected. The root view never disappears,
+    /// so the scene phase is the only reliable signal.
+    func scenePhaseChanged(to phase: ScenePhase) {
+        switch phase {
+        case .active:
+            if selection.routeName != nil {
+                startPolling()
+            }
+        case .background:
+            stopPolling()
+        default:
+            break
+        }
     }
 
     // MARK: - Sheet selection
@@ -184,48 +235,137 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Search & direction
 
-    /// Step 1: User picks a route — show both direction polylines, present direction picker.
-    /// Starts polling for vehicle positions.
+    /// Step 1: User picks a route — show both direction polylines, present
+    /// direction picker, start polling.
     func selectRoute(_ route: String) {
-        searchText = route
+        selection = .route(route)
+        searchText = ""
         isSearchActive = false
-        selectedDirection = nil
+        routeShapes = []
+        activeRouteShapes = []
         activeRouteStops = []
+        directionOptions = []
         nearbyStops = []
-        activeRouteShapes = routeShapeService.shapes(for: route)
+        closestStop = nil
+        walkingMinutes = nil
         startPolling()
+        loadDetails(for: selection)
     }
 
     /// Step 2: User picks a direction — filter to that direction, show stops.
     func selectDirection(_ direction: Int) {
-        selectedDirection = direction
-        activeRouteShapes = routeShapeService.shapes(for: searchText)
-            .filter { $0.direction == direction }
-        activeRouteStops = routeStopService.stops(for: searchText, direction: direction)
-        updateClosestStop()
+        guard let routeName = selection.routeName else { return }
+        selection = .routeAndDirection(routeName, direction: direction)
+        activeRouteShapes = routeShapes.filter { $0.direction == direction }
+        activeRouteStops = []
+        loadDetails(for: selection)
     }
 
     /// Go back from direction to direction picker.
     func clearDirection() {
-        selectedDirection = nil
+        guard let routeName = selection.routeName else { return }
+        selection = .route(routeName)
         activeRouteStops = []
         closestStop = nil
         walkingMinutes = nil
-        activeRouteShapes = routeShapeService.shapes(for: searchText)
+        activeRouteShapes = routeShapes
+        loadDetails(for: selection)
     }
 
     /// Clear everything back to idle — stops polling and shows nearby stops.
     func clearSearch() {
+        selection = .idle
         searchText = ""
         isSearchActive = false
-        selectedDirection = nil
+        detailsTask?.cancel()
+        detailsTask = nil
+        routeShapes = []
         activeRouteShapes = []
         activeRouteStops = []
+        directionOptions = []
         closestStop = nil
         walkingMinutes = nil
         stopPolling()
         vehicles = []
+        errorMessage = nil
         updateNearbyStops()
+    }
+
+    /// The user pressed Done or return in the search field. Selects the
+    /// route the text identifies (so "39a" selects "39A"); otherwise stays in
+    /// search. An empty field just closes search.
+    func submitSearch() {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        if query.isEmpty {
+            searchText = ""
+            isSearchActive = false
+            return
+        }
+        if let match = Self.uniqueMatch(for: query, in: availableRoutes) {
+            selectRoute(match)
+        }
+    }
+
+    /// The single route `text` identifies: the only case-insensitive exact
+    /// match, else the only route containing it. Nil when ambiguous.
+    nonisolated static func uniqueMatch(for text: String, in routes: [String]) -> String? {
+        let query = text.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return nil }
+        let exact = routes.filter { $0.caseInsensitiveCompare(query) == .orderedSame }
+        if exact.count == 1 {
+            return exact[0]
+        }
+        guard exact.isEmpty else { return nil }
+        let partial = routes.filter { $0.localizedCaseInsensitiveContains(query) }
+        return partial.count == 1 ? partial[0] : nil
+    }
+
+    /// Direction choices for a route: every direction that has a shape or
+    /// stops (routes 447 and 448, for example, have stops but no shapes),
+    /// labelled with the headsign when one is known.
+    nonisolated static func directionOptions(
+        shapeDirections: Set<Int>,
+        stopDirections: Set<Int>,
+        headsign: (Int) -> String?
+    ) -> [DirectionOption] {
+        shapeDirections.union(stopDirections).sorted().map {
+            DirectionOption(direction: $0, headsign: headsign($0))
+        }
+    }
+
+    // MARK: - Route details
+
+    /// Loads shapes, direction options and (with a direction) stops for a
+    /// selection off the main thread, then applies them if the selection
+    /// has not changed meanwhile.
+    private func loadDetails(for selection: RouteSelection) {
+        detailsTask?.cancel()
+        guard let routeName = selection.routeName else { return }
+        let headsigns = headsignLookup
+
+        detailsTask = Task { [weak self, shapeService = routeShapeService, stopService = routeStopService] in
+            let shapes = await shapeService.shapes(for: routeName)
+            let stopDirections = await stopService.directions(for: routeName)
+            var stops: [RouteStop] = []
+            if let direction = selection.direction {
+                stops = await stopService.stops(for: routeName, direction: direction)
+            }
+
+            guard let self, !Task.isCancelled, self.selection == selection else { return }
+            self.routeShapes = shapes
+            self.directionOptions = Self.directionOptions(
+                shapeDirections: Set(shapes.map(\.direction)),
+                stopDirections: stopDirections,
+                headsign: { headsigns["\(routeName)_\($0)"] }
+            )
+            if let direction = selection.direction {
+                self.activeRouteShapes = shapes.filter { $0.direction == direction }
+                self.activeRouteStops = stops
+                self.updateClosestStop()
+            } else {
+                self.activeRouteShapes = shapes
+            }
+        }
     }
 
     // MARK: - Nearby stops (idle state)
@@ -233,16 +373,28 @@ final class MapViewModel: ObservableObject {
     /// Updates nearby stops for the current mode and user location.
     /// Only runs in idle state (no route selected).
     private func updateNearbyStops() {
-        guard searchText.isEmpty,
+        nearbyTask?.cancel()
+        guard selection == .idle,
               let userCoord = locationService.userLocation else {
             nearbyStops = []
             return
         }
-        nearbyStops = routeStopService.nearbyStops(
-            routeNames: staticRoutesByMode[selectedMode] ?? [],
-            center: userCoord,
-            radius: Self.nearbyRadius
-        )
+        let mode = selectedMode
+        let routeNames = staticRoutesByMode[mode] ?? []
+        let latitude = userCoord.latitude
+        let longitude = userCoord.longitude
+
+        nearbyTask = Task { [weak self, stopService = routeStopService] in
+            let stops = await stopService.nearbyStops(
+                routeNames: routeNames,
+                latitude: latitude,
+                longitude: longitude,
+                radius: Self.nearbyRadius
+            )
+            guard let self, !Task.isCancelled,
+                  self.selection == .idle, self.selectedMode == mode else { return }
+            self.nearbyStops = stops
+        }
     }
 
     // MARK: - Closest stop
@@ -284,14 +436,12 @@ final class MapViewModel: ObservableObject {
         guard pollingTask == nil else { return }
 
         pollingTask = Task { [weak self] in
-            guard let self else { return }
-
-            await self.fetchVehicles()
+            await self?.fetchVehicles()
 
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollingInterval)
                 guard !Task.isCancelled else { break }
-                await self.fetchVehicles()
+                await self?.fetchVehicles()
             }
         }
     }
@@ -305,32 +455,52 @@ final class MapViewModel: ObservableObject {
         if vehicles.isEmpty {
             isLoading = true
         }
+        defer { isLoading = false }
 
+        let mode = selectedMode
         do {
-            let result = try await serverService.fetchVehicles(mode: selectedMode)
-            if !result.isEmpty {
-                vehicles = result
-                errorMessage = nil
-            }
+            let result = try await serverService.fetchVehicles(mode: mode)
+            guard mode == selectedMode, selection != .idle else { return }
+            // An empty list is a real answer (no vehicles running), so it
+            // replaces the previous positions instead of leaving stale ones.
+            vehicles = result
+            errorMessage = nil
         } catch {
+            guard !Self.isCancellation(error) else { return }
             Self.logger.error("Vehicle fetch failed: \(error.localizedDescription)")
+            // Keep showing the last good positions; only an empty map gets
+            // an error message.
             if vehicles.isEmpty {
                 errorMessage = Self.userFriendlyError(error)
             }
         }
+    }
 
-        isLoading = false
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        return (error as? URLError)?.code == .cancelled
     }
 
     /// Maps technical errors to user-friendly messages.
-    private static func userFriendlyError(_ error: Error) -> String {
+    nonisolated static func userFriendlyError(_ error: Error) -> String {
         if let serverError = error as? TurasServerError {
             switch serverError {
             case .httpError(let code):
-                if code >= 500 { return "Service temporarily unavailable. Retrying..." }
-                if code == 401 || code == 403 { return "API key issue. Check configuration." }
-                return "Network error (\(code)). Check your connection."
-            default:
+                switch code {
+                case 401, 403:
+                    return "API key issue. Check configuration."
+                case 429:
+                    return "Too many requests. Retrying..."
+                case 503:
+                    return "Server is starting up. Retrying..."
+                case 500...:
+                    return "Service temporarily unavailable. Retrying..."
+                default:
+                    return "Network error (\(code)). Check your connection."
+                }
+            case .invalidURL, .invalidResponse:
                 return "Server error. Retrying..."
             }
         }

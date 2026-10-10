@@ -1,10 +1,9 @@
-import CoreLocation
 import Foundation
 import os
 
-/// Fetches data from the Turas backend server instead of calling TFI/Luas APIs directly.
-/// The server pre-computes arrivals using the full GTFS static schedule (6.6M stop_times)
-/// which the app can't bundle locally, resulting in more accurate delay predictions.
+/// Fetches data from the Turas backend server. The server polls TFI,
+/// Irish Rail and Luas, and computes arrivals from the full GTFS schedule,
+/// which the app cannot bundle.
 actor TurasServerService {
     private let baseURL: String
     private let apiKey: String
@@ -12,46 +11,59 @@ actor TurasServerService {
 
     private static let logger = Logger(subsystem: "com.turas", category: "TurasServerService")
 
-    init() {
-        self.baseURL = Config.turasServerURL
-        self.apiKey = Config.turasServerApiKey
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 10
-        self.session = URLSession(configuration: config)
+    /// - Parameter session: injected by tests (a URLProtocol stub); the
+    ///   default is an ephemeral session with a 10 second timeout.
+    init(config: ServerConfig, session: URLSession? = nil) {
+        self.baseURL = config.baseURL
+        self.apiKey = config.apiKey
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 10
+            self.session = URLSession(configuration: configuration)
+        }
     }
 
     // MARK: - Vehicles
 
-    /// Fetches live vehicle positions for a transport mode from the server.
+    /// Fetches live vehicle positions for a transport mode.
     func fetchVehicles(mode: TransportMode) async throws -> [Vehicle] {
-        let url = "\(baseURL)/api/v1/vehicles?mode=\(mode.rawValue)"
-        let data = try await request(url: url)
-        let response = try JSONDecoder.iso8601.decode([ServerVehicle]?.self, from: data)
-        return (response ?? []).map { $0.toVehicle() }
+        let data = try await get("/api/v1/vehicles", query: [
+            URLQueryItem(name: "mode", value: mode.rawValue),
+        ])
+        let response = try ServerJSON.decoder.decode([ServerVehicle]?.self, from: data)
+        return (response ?? []).map(\.vehicle)
     }
 
     // MARK: - Arrivals
 
-    /// Fetches predicted arrivals for bus/train stops from the server.
+    /// Fetches predicted arrivals for bus/train stops.
     func fetchArrivals(stopId: String, routeName: String, direction: Int) async throws -> [StopArrival] {
-        let url = "\(baseURL)/api/v1/arrivals?stop_id=\(stopId)&route=\(routeName.urlEncoded)&direction=\(direction)"
-        let data = try await request(url: url)
-        let response = try JSONDecoder.iso8601.decode([ServerStopArrival]?.self, from: data)
-        return (response ?? []).map { $0.toStopArrival() }
+        let data = try await get("/api/v1/arrivals", query: [
+            URLQueryItem(name: "stop_id", value: stopId),
+            URLQueryItem(name: "route", value: routeName),
+            URLQueryItem(name: "direction", value: String(direction)),
+        ])
+        let response = try ServerJSON.decoder.decode([ServerStopArrival]?.self, from: data)
+        return (response ?? []).map(\.stopArrival)
     }
 
-    /// Fetches Luas arrivals from the server (proxied with 30s cache).
+    /// Fetches Luas arrivals (proxied by the server with a 30s cache).
     func fetchLuasArrivals(stopId: String, direction: Int, routeName: String) async throws -> [StopArrival] {
-        let url = "\(baseURL)/api/v1/luas/arrivals?stop_id=\(stopId)&direction=\(direction)&route=\(routeName.urlEncoded)"
-        let data = try await request(url: url)
-        let response = try JSONDecoder.iso8601.decode([ServerStopArrival]?.self, from: data)
-        return (response ?? []).map { $0.toStopArrival() }
+        let data = try await get("/api/v1/luas/arrivals", query: [
+            URLQueryItem(name: "stop_id", value: stopId),
+            URLQueryItem(name: "direction", value: String(direction)),
+            URLQueryItem(name: "route", value: routeName),
+        ])
+        let response = try ServerJSON.decoder.decode([ServerStopArrival]?.self, from: data)
+        return (response ?? []).map(\.stopArrival)
     }
 
     // MARK: - Private
 
-    private func request(url urlString: String) async throws -> Data {
-        guard let url = URL(string: urlString) else {
+    private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
+        guard let url = Self.makeURL(baseURL: baseURL, path: path, query: query) else {
             throw TurasServerError.invalidURL
         }
 
@@ -65,20 +77,35 @@ actor TurasServerService {
         }
 
         guard httpResponse.statusCode == 200 else {
-            Self.logger.error("Server returned HTTP \(httpResponse.statusCode) for \(urlString)")
+            Self.logger.error("Server returned HTTP \(httpResponse.statusCode) for \(path)")
             throw TurasServerError.httpError(statusCode: httpResponse.statusCode)
         }
 
         return data
     }
+
+    /// Builds a request URL, percent-encoding every query value, including
+    /// characters URLComponents would otherwise leave alone ("+", "&", "=").
+    static func makeURL(baseURL: String, path: String, query: [URLQueryItem]) -> URL? {
+        guard var components = URLComponents(string: baseURL + path) else { return nil }
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=?#")
+        components.percentEncodedQueryItems = query.map { item in
+            URLQueryItem(
+                name: item.name,
+                value: item.value?.addingPercentEncoding(withAllowedCharacters: allowed)
+            )
+        }
+        return components.url
+    }
 }
 
 // MARK: - Server JSON Models
 
-/// Matches the JSON shape returned by the Turas server's Vehicle.
-private struct ServerVehicle: Decodable {
+/// Matches the server's Vehicle JSON (see the server's internal/model).
+struct ServerVehicle: Decodable, Equatable {
     let id: String
-    let trip_id: String
+    let tripId: String
     let route: String
     let headsign: String?
     let direction: Int
@@ -88,14 +115,21 @@ private struct ServerVehicle: Decodable {
     let timestamp: Date
     let mode: String
 
-    func toVehicle() -> Vehicle {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case tripId = "trip_id"
+        case route, headsign, direction, lat, lon, bearing, timestamp, mode
+    }
+
+    var vehicle: Vehicle {
         Vehicle(
             id: id,
-            tripId: trip_id,
+            tripId: tripId,
             routeId: route,
             headsign: headsign,
             direction: direction,
-            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+            latitude: lat,
+            longitude: lon,
             bearing: bearing,
             timestamp: timestamp,
             mode: TransportMode(rawValue: mode) ?? .bus
@@ -103,32 +137,81 @@ private struct ServerVehicle: Decodable {
     }
 }
 
-/// Matches the JSON shape returned by the Turas server's StopArrival.
-private struct ServerStopArrival: Decodable {
-    let trip_id: String
+/// Matches the server's StopArrival JSON.
+struct ServerStopArrival: Decodable, Equatable {
+    let tripId: String
     let route: String
     let headsign: String?
     let delay: Int
-    let predicted_arrival: Date
-    let is_live: Bool
-    let is_cancelled: Bool
+    let predictedArrival: Date
+    let isLive: Bool
+    let isCancelled: Bool
 
-    func toStopArrival() -> StopArrival {
+    enum CodingKeys: String, CodingKey {
+        case tripId = "trip_id"
+        case route, headsign, delay
+        case predictedArrival = "predicted_arrival"
+        case isLive = "is_live"
+        case isCancelled = "is_cancelled"
+    }
+
+    var stopArrival: StopArrival {
         StopArrival(
-            id: trip_id,
+            id: tripId,
             routeId: route,
             headsign: headsign,
             delay: delay,
-            predictedArrival: predicted_arrival,
-            isLive: is_live,
-            isCancelled: is_cancelled
+            predictedArrival: predictedArrival,
+            isLive: isLive,
+            isCancelled: isCancelled
         )
     }
 }
 
+/// Matches the server's error body, {"error": "..."}.
+struct ServerError: Decodable, Equatable {
+    let error: String
+}
+
+/// JSON decoding shared by the server models.
+enum ServerJSON {
+    /// Decodes RFC 3339 dates with or without fractional seconds.
+    static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { dateDecoder in
+            let container = try dateDecoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            guard let date = ServerJSON.parseDate(string) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Expected an RFC 3339 date, got \(string)"
+                )
+            }
+            return date
+        }
+        return decoder
+    }()
+
+    static func parseDate(_ string: String) -> Date? {
+        wholeSeconds.date(from: string) ?? fractionalSeconds.date(from: string)
+    }
+
+    private static let wholeSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let fractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+}
+
 // MARK: - Errors
 
-enum TurasServerError: LocalizedError {
+enum TurasServerError: LocalizedError, Equatable {
     case invalidURL
     case invalidResponse
     case httpError(statusCode: Int)
@@ -140,20 +223,4 @@ enum TurasServerError: LocalizedError {
         case .httpError(let code): "Server error (HTTP \(code))"
         }
     }
-}
-
-// MARK: - Helpers
-
-private extension String {
-    var urlEncoded: String {
-        addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? self
-    }
-}
-
-private extension JSONDecoder {
-    static let iso8601: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
 }

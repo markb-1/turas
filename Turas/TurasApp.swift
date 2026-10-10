@@ -2,35 +2,42 @@ import SwiftUI
 
 /// App entry point.
 ///
-/// Key SwiftUI concept: `@main` marks this as the app's entry point.
-/// The `App` protocol requires a single `body` that returns a `Scene`.
-/// `WindowGroup` is the standard scene for an iOS app — it manages
-/// a single window containing your root view.
-///
-/// We create our services here at the top level and pass them down.
-/// This is simple dependency injection — no frameworks needed.
+/// Services are created once here and passed down (simple dependency
+/// injection, no frameworks). A build without server settings shows
+/// ServerNotConfiguredView instead of the map (Debug builds stop earlier,
+/// in Config).
 @main
+@MainActor
 struct TurasApp: App {
-    private let serverService: TurasServerService
-    private let locationService: LocationService
-    private let routeShapeService: RouteShapeService
-    private let routeStopService: RouteStopService
+    private let dependencies: AppDependencies?
 
     init() {
-        self.serverService = TurasServerService()
-        self.locationService = LocationService()
-        self.routeShapeService = RouteShapeService()
-        self.routeStopService = RouteStopService()
+        dependencies = Config.server.map { AppDependencies(config: $0) }
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                serverService: serverService,
-                locationService: locationService,
-                routeShapeService: routeShapeService,
-                routeStopService: routeStopService
-            )
+            if let dependencies {
+                ContentView(dependencies: dependencies)
+            } else {
+                ServerNotConfiguredView()
+            }
         }
+    }
+}
+
+/// Long-lived services shared by the whole app.
+@MainActor
+final class AppDependencies {
+    let serverService: TurasServerService
+    let locationService: LocationService
+    let routeShapeService: RouteShapeService
+    let routeStopService: RouteStopService
+
+    init(config: ServerConfig) {
+        self.serverService = TurasServerService(config: config)
+        self.locationService = LocationService()
+        self.routeShapeService = RouteShapeService()
+        self.routeStopService = RouteStopService()
     }
 }

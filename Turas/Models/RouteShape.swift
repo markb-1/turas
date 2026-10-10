@@ -1,12 +1,12 @@
-import Foundation
 import CoreLocation
+import Foundation
 
-/// A simplified polyline for one direction of a bus route.
+/// A simplified polyline for one direction of a route.
 ///
 /// Decoded from the bundled `route_shapes.json`, which was pre-processed
 /// from the static GTFS `shapes.txt` using Douglas-Peucker simplification.
 /// Each shape typically has ~150-200 coordinate points.
-struct RouteShape: Decodable {
+struct RouteShape: Decodable, Sendable {
     let direction: Int          // 0 = outbound, 1 = inbound
     let coordinates: [[Double]] // [[lat, lon], ...]
 

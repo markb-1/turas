@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Transport modes derived from the GTFS-RT agency prefix in rawRouteId.
-enum TransportMode: String, CaseIterable, Identifiable, Equatable {
+/// Transport modes derived from the GTFS agency prefix in a raw route_id.
+enum TransportMode: String, CaseIterable, Identifiable, Codable, Sendable {
     case bus
     case luas
     case train

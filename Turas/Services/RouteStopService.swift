@@ -1,39 +1,56 @@
-import CoreLocation
 import Foundation
 import os
 
-/// Loads route stop data from the bundled JSON on demand.
-/// Same lazy-loading pattern as RouteShapeService.
-final class RouteStopService {
+/// Route stops from the bundled route_stops.json (~2 MB).
+///
+/// Same pattern as RouteShapeService: an actor that decodes the file once,
+/// off the main thread. Routes that exist under two agencies (e.g. Dublin
+/// 220 and Cork 220) have one entry per agency and direction in the file;
+/// they are merged here because the file is keyed by short name only.
+actor RouteStopService {
     private static let logger = Logger(subsystem: "com.turas", category: "RouteStopService")
-    private var allStops: [String: [RouteStopDirection]]?
+    private var stopsByRoute: [String: [RouteStopDirection]]?
+
+    /// - Parameter stopsByRoute: decoded stops keyed by route short name.
+    ///   Pass nil (the default) to load the bundled file lazily; tests
+    ///   inject data.
+    init(stopsByRoute: [String: [RouteStopDirection]]? = nil) {
+        self.stopsByRoute = stopsByRoute
+    }
+
+    /// Decodes the bundled file now so the first route tap does not wait for it.
+    func preload() {
+        _ = loaded()
+    }
 
     /// Returns all direction entries for a route short name.
     func stops(for routeName: String) -> [RouteStopDirection] {
-        if allStops == nil { loadStops() }
-        return allStops?[routeName] ?? []
+        loaded()[routeName] ?? []
     }
 
-    /// Returns stops for a specific route and direction.
-    /// Merges stops from all matching direction entries (handles routes
-    /// that span multiple regions, e.g. Dublin 220 + Cork 220).
+    /// Returns stops for a specific route and direction, merging every
+    /// matching direction entry.
     func stops(for routeName: String, direction: Int) -> [RouteStop] {
         stops(for: routeName)
             .filter { $0.direction == direction }
             .flatMap(\.stops)
     }
 
-    /// Returns deduplicated stops within `radius` metres of `center`,
-    /// filtered to routes in `routeNames`. Each NearbyStop includes
-    /// all route names that serve it.
+    /// Directions (0/1) that have stops for this route.
+    func directions(for routeName: String) -> Set<Int> {
+        Set(stops(for: routeName).filter { !$0.stops.isEmpty }.map(\.direction))
+    }
+
+    /// Returns deduplicated stops within `radius` metres of the given point,
+    /// served by any route in `routeNames`, nearest first. Each NearbyStop
+    /// lists every route name that serves it.
     func nearbyStops(
         routeNames: Set<String>,
-        center: CLLocationCoordinate2D,
+        latitude: Double,
+        longitude: Double,
         radius: Double
     ) -> [NearbyStop] {
-        if allStops == nil { loadStops() }
-        guard let allStops else { return [] }
-
+        let allStops = loaded()
         var seen: [String: (stop: RouteStop, routeNames: Set<String>, distance: Double)] = [:]
 
         for routeName in routeNames {
@@ -41,7 +58,7 @@ final class RouteStopService {
             for dir in directions {
                 for stop in dir.stops {
                     let d = GeoUtils.straightLineDistance(
-                        lat1: center.latitude, lon1: center.longitude,
+                        lat1: latitude, lon1: longitude,
                         lat2: stop.lat, lon2: stop.lon
                     )
                     guard d <= radius else { continue }
@@ -57,22 +74,30 @@ final class RouteStopService {
         }
 
         return seen.values
-            .sorted { $0.distance < $1.distance }
+            .sorted { ($0.distance, $0.stop.id) < ($1.distance, $1.stop.id) }
             .map { NearbyStop(stop: $0.stop, routeNames: $0.routeNames, distance: $0.distance) }
     }
 
-    private func loadStops() {
+    private func loaded() -> [String: [RouteStopDirection]] {
+        if let stopsByRoute {
+            return stopsByRoute
+        }
+        let decoded = Self.decodeBundledStops()
+        stopsByRoute = decoded
+        return decoded
+    }
+
+    private static func decodeBundledStops() -> [String: [RouteStopDirection]] {
         guard let url = Bundle.main.url(forResource: "route_stops", withExtension: "json") else {
-            Self.logger.warning("route_stops.json not found in bundle")
-            allStops = [:]
-            return
+            logger.warning("route_stops.json not found in bundle")
+            return [:]
         }
         do {
             let data = try Data(contentsOf: url)
-            allStops = try JSONDecoder().decode([String: [RouteStopDirection]].self, from: data)
+            return try JSONDecoder().decode([String: [RouteStopDirection]].self, from: data)
         } catch {
-            Self.logger.warning("Failed to decode route_stops.json: \(error.localizedDescription)")
-            allStops = [:]
+            logger.warning("Failed to decode route_stops.json: \(error.localizedDescription)")
+            return [:]
         }
     }
 }

@@ -12,20 +12,16 @@ import MapKit
 ///   modifier controls how tall the sheet can be.
 struct ContentView: View {
     @StateObject private var viewModel: MapViewModel
+    @Environment(\.scenePhase) private var scenePhase
     private let serverService: TurasServerService
 
-    init(
-        serverService: TurasServerService,
-        locationService: LocationService,
-        routeShapeService: RouteShapeService,
-        routeStopService: RouteStopService
-    ) {
-        self.serverService = serverService
+    init(dependencies: AppDependencies) {
+        self.serverService = dependencies.serverService
         _viewModel = StateObject(wrappedValue: MapViewModel(
-            serverService: serverService,
-            locationService: locationService,
-            routeShapeService: routeShapeService,
-            routeStopService: routeStopService
+            serverService: dependencies.serverService,
+            locationService: dependencies.locationService,
+            routeShapeService: dependencies.routeShapeService,
+            routeStopService: dependencies.routeStopService
         ))
     }
 
@@ -33,7 +29,7 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             mapView
 
-            if viewModel.isLoading && !viewModel.searchText.isEmpty && viewModel.vehicles.isEmpty {
+            if viewModel.isLoading && viewModel.selection != .idle && viewModel.vehicles.isEmpty {
                 loadingOverlay
             }
 
@@ -44,7 +40,9 @@ struct ContentView: View {
             RouteSearchBar(viewModel: viewModel)
         }
         .onAppear { viewModel.onAppear() }
-        .onDisappear { viewModel.onDisappear() }
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.scenePhaseChanged(to: phase)
+        }
         .sheet(item: $viewModel.activeSheet) { sheet in
             switch sheet {
             case .vehicle(let vehicle):
@@ -54,7 +52,7 @@ struct ContentView: View {
             case .stop(let stop):
                 StopDetailSheet(
                     stop: stop,
-                    routeName: viewModel.searchText,
+                    routeName: viewModel.selectedRouteName ?? "",
                     direction: viewModel.selectedDirection ?? 0,
                     mode: viewModel.selectedMode,
                     serverService: serverService

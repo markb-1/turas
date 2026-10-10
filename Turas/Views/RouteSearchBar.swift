@@ -17,12 +17,15 @@ struct RouteSearchBar: View {
             VStack(spacing: 0) {
                 if viewModel.isSearchActive {
                     expandedSearchView
-                } else if !viewModel.searchText.isEmpty && viewModel.selectedDirection == nil {
-                    directionPickerView
-                } else if !viewModel.searchText.isEmpty && viewModel.selectedDirection != nil {
-                    activeFilterView
                 } else {
-                    collapsedView
+                    switch viewModel.selection {
+                    case .idle:
+                        collapsedView
+                    case .route:
+                        directionPickerView
+                    case .routeAndDirection:
+                        activeFilterView
+                    }
                 }
             }
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -93,7 +96,7 @@ struct RouteSearchBar: View {
     private var directionPickerView: some View {
         VStack(spacing: 8) {
             HStack {
-                Text(viewModel.searchText)
+                Text(viewModel.selectedRouteName ?? "")
                     .fontWeight(.semibold)
                 Spacer()
                 Button {
@@ -109,16 +112,16 @@ struct RouteSearchBar: View {
             .padding(.top, 12)
 
             VStack(spacing: 6) {
-                ForEach(viewModel.directionLabels, id: \.direction) { item in
+                ForEach(viewModel.directionOptions) { option in
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) {
-                            viewModel.selectDirection(item.direction)
+                            viewModel.selectDirection(option.direction)
                         }
                     } label: {
                         HStack {
                             Image(systemName: "arrow.right")
                                 .foregroundStyle(viewModel.activeRouteColor)
-                            Text("To \(item.label)")
+                            Text(option.title)
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption)
@@ -145,14 +148,14 @@ struct RouteSearchBar: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(viewModel.searchText)
+                    Text(viewModel.selectedRouteName ?? "")
                         .fontWeight(.semibold)
                     if let dir = viewModel.selectedDirection,
-                       let label = viewModel.directionLabels.first(where: { $0.direction == dir })?.label {
+                       let option = viewModel.directionOptions.first(where: { $0.direction == dir }) {
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Text("To \(label)")
+                        Text(option.title)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -183,7 +186,14 @@ struct RouteSearchBar: View {
                     .foregroundStyle(.secondary)
                 TextField(viewModel.selectedMode.searchPlaceholder, text: $viewModel.searchText)
                     .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
                     .focused($isTextFieldFocused)
+                    .onSubmit {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            viewModel.submitSearch()
+                        }
+                    }
 
                 if !viewModel.searchText.isEmpty {
                     Button {
@@ -197,7 +207,7 @@ struct RouteSearchBar: View {
                 Button("Done") {
                     withAnimation(.easeOut(duration: 0.2)) {
                         isTextFieldFocused = false
-                        viewModel.isSearchActive = false
+                        viewModel.submitSearch()
                     }
                 }
                 .fontWeight(.medium)
@@ -219,13 +229,13 @@ struct RouteSearchBar: View {
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                                     .background(
-                                        route == viewModel.searchText
+                                        route == viewModel.selectedRouteName
                                             ? viewModel.selectedMode.routeColor(for: route)
                                             : Color.secondary.opacity(0.15),
                                         in: Capsule()
                                     )
                                     .foregroundStyle(
-                                        route == viewModel.searchText ? .white : .primary
+                                        route == viewModel.selectedRouteName ? .white : .primary
                                     )
                             }
                             .buttonStyle(.plain)
