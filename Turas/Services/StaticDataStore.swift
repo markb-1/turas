@@ -171,9 +171,11 @@ actor StaticDataStore {
         )
     }
 
-    /// Builds one route per (agency prefix, short name) from route_lookup
-    /// ("5249_119681" -> "39A"). headsign_lookup is keyed by name only
-    /// ("39A_0"), so same-named routes share headsigns here.
+    /// Builds one route per short name from route_lookup ("5249_119681" ->
+    /// "39A"). The bundle predates TFI's current route_ids, so its prefixes
+    /// still give the mode but are not the server's agency IDs: bundled
+    /// routes carry no agency, and the server picks one when asked. Shared
+    /// names (220) are one entry until the server's list arrives.
     static func makeRouteLists(
         routeLookup: [String: String],
         headsigns: [String: String]
@@ -181,15 +183,15 @@ actor StaticDataStore {
         var seen: Set<String> = []
         var byMode: [TransportMode: [TransitRoute]] = [:]
         for (rawId, name) in routeLookup where !name.isEmpty {
-            let agencyId = TransportMode.agencyId(fromRawRouteId: rawId) ?? ""
-            guard seen.insert("\(agencyId)|\(name)").inserted else { continue }
+            let mode = TransportMode.from(rawRouteId: rawId)
+            guard seen.insert("\(mode.rawValue)|\(name)").inserted else { continue }
             let route = TransitRoute(
                 name: name,
-                agencyId: agencyId,
+                agencyId: "",
                 headsignOutbound: headsigns["\(name)_0"],
                 headsignInbound: headsigns["\(name)_1"]
             )
-            byMode[TransportMode.from(rawRouteId: rawId), default: []].append(route)
+            byMode[mode, default: []].append(route)
         }
         return byMode.mapValues { routes in
             routes.sorted { ($0.name, $0.agencyId) < ($1.name, $1.agencyId) }

@@ -163,6 +163,7 @@ final class MapViewModel: ObservableObject {
     private var detailsTask: Task<Void, Never>?
     private var nearbyTask: Task<Void, Never>?
     private var routeListsTask: Task<Void, Never>?
+    private var resolveTask: Task<Void, Never>?
     private var hasAppeared = false
 
     private static let logger = Logger(subsystem: "com.turas", category: "MapViewModel")
@@ -300,6 +301,8 @@ final class MapViewModel: ObservableObject {
     /// direction picker, start polling. With a direction (from a recent or
     /// starred entry) it goes straight to step 2.
     func selectRoute(_ route: RouteRef, direction: Int? = nil) {
+        resolveTask?.cancel()
+        resolveTask = nil
         if let direction {
             selection = .routeAndDirection(route, direction: direction)
         } else {
@@ -335,9 +338,11 @@ final class MapViewModel: ObservableObject {
     /// share the name, the one serving the stop is chosen.
     func selectRoute(named name: String, atStop stopId: String) {
         let mode = selectedMode
-        Task { [weak self, store = staticData] in
+        resolveTask?.cancel()
+        resolveTask = Task { [weak self, store = staticData] in
             let route = await store.resolve(name: name, mode: mode, atStop: stopId)
-            guard let self, self.selectedMode == mode else { return }
+            // A newer selection or a mode switch cancels this one.
+            guard !Task.isCancelled, let self, self.selectedMode == mode else { return }
             self.selectRoute(route)
         }
     }
@@ -365,6 +370,8 @@ final class MapViewModel: ObservableObject {
 
     /// Clear everything back to idle — stops polling and shows nearby stops.
     func clearSearch() {
+        resolveTask?.cancel()
+        resolveTask = nil
         selection = .idle
         searchText = ""
         isSearchActive = false
@@ -437,13 +444,16 @@ final class MapViewModel: ObservableObject {
 
     /// Direction choices for a route: every direction that has a shape or
     /// stops (routes 447 and 448, for example, have stops but no shapes),
-    /// labelled with the headsign when one is known.
+    /// labelled with the headsign when one is known. A route nothing is known
+    /// about (newer than the bundle, from a server that sends no directions)
+    /// offers both, so the picker is never a dead end.
     nonisolated static func directionOptions(
         shapeDirections: Set<Int>,
         stopDirections: Set<Int>,
         headsign: (Int) -> String?
     ) -> [DirectionOption] {
-        shapeDirections.union(stopDirections).sorted().map {
+        let known = shapeDirections.union(stopDirections)
+        return (known.isEmpty ? [0, 1] : known.sorted()).map {
             DirectionOption(direction: $0, headsign: headsign($0))
         }
     }
@@ -593,7 +603,8 @@ final class MapViewModel: ObservableObject {
         if vehicles.isEmpty {
             isLoading = true
         }
-        defer { isLoading = false }
+        // A cancelled poll must not clear the spinner of the poll replacing it.
+        defer { if !Task.isCancelled { isLoading = false } }
 
         let mode = selectedMode
         do {

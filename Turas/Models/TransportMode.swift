@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Transport modes derived from the GTFS agency prefix in a raw route_id.
+/// Transport modes. The server sets each route's and vehicle's mode.
 enum TransportMode: String, CaseIterable, Identifiable, Codable, Sendable {
     case bus
     case luas
@@ -8,20 +8,12 @@ enum TransportMode: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var id: String { rawValue }
 
-    /// Determines transport mode from the raw GTFS route_id agency prefix.
+    /// Mode of a raw route_id in the bundled route_lookup, which predates
+    /// TFI's current free-form route_ids and still uses "<agency>_<id>".
     static func from(rawRouteId: String) -> TransportMode {
         if rawRouteId.hasPrefix("5242_") { return .luas }
         if rawRouteId.hasPrefix("5422_") { return .train }
         return .bus
-    }
-
-    /// The agency prefix of a raw GTFS route_id ("5249_119681" -> "5249"),
-    /// or nil when it has none.
-    static func agencyId(fromRawRouteId rawRouteId: String) -> String? {
-        guard let underscore = rawRouteId.firstIndex(of: "_"), underscore != rawRouteId.startIndex else {
-            return nil
-        }
-        return String(rawRouteId[..<underscore])
     }
 
     var label: String {

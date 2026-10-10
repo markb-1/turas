@@ -213,7 +213,7 @@ final class StaticDataStoreTests: XCTestCase {
 
     // MARK: - Bundled lists
 
-    func testMakeRouteListsKeepsAgenciesApart() {
+    func testMakeRouteListsLeavesAgencyToServer() {
         let lists = StaticDataStore.makeRouteLists(
             routeLookup: [
                 "5249_1": "220", "5249_2": "220", "5401_9": "220",
@@ -221,7 +221,9 @@ final class StaticDataStoreTests: XCTestCase {
             ],
             headsigns: ["220_0": "Lady's Well", "Green_1": "Broombridge"]
         )
-        XCTAssertEqual(lists[.bus]?.map(\.id), ["5249|220", "5401|220"])
+        // Bundled prefixes are not current agency IDs: one 220, no agency.
+        XCTAssertEqual(lists[.bus]?.map(\.id), ["|220"])
+        XCTAssertNil(lists[.bus]?.first?.ref.agencyId)
         XCTAssertEqual(lists[.bus]?.first?.headsign(for: 0), "Lady's Well")
         XCTAssertEqual(lists[.luas]?.first?.headsign(for: 1), "Broombridge")
         XCTAssertEqual(lists[.train]?.map(\.name), ["DART"])

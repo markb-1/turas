@@ -81,8 +81,11 @@ final class MapViewModelTests: XCTestCase {
         XCTAssertEqual(options.map(\.title), ["Direction 0", "Direction 1"])
     }
 
-    func testDirectionOptionsEmpty() {
-        XCTAssertEqual(MapViewModel.directionOptions(shapeDirections: [], stopDirections: [], headsign: { _ in "x" }), [])
+    func testDirectionOptionsFallBackToBothDirections() {
+        XCTAssertEqual(
+            MapViewModel.directionOptions(shapeDirections: [], stopDirections: [], headsign: { _ in nil }).map(\.direction),
+            [0, 1]
+        )
     }
 
     // MARK: - Selection

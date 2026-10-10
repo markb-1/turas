@@ -18,9 +18,11 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
 - CI (`.github/workflows/ci.yml`, macos-latest) writes placeholder xcconfig files,
   runs `xcodegen generate` and `xcodebuild test` on the newest iPhone simulator.
 - Never commit `Configuration/*.xcconfig`: they hold the server URL and API key.
-- `Supporting/Info.plist` (Release) and `Supporting/Info-Debug.plist` (Debug) are
-  maintained by hand and must stay identical apart from `NSAppTransportSecurity`; only
-  Debug allows plain HTTP to `$(TURAS_SERVER_HOST)`.
+- `Supporting/Info.plist` is shared by both configurations and has no ATS settings. When
+  `TURAS_SERVER_URL` is `http://`, the `Supporting/add-ats-exception.sh` build phase adds
+  an exception for `TURAS_SERVER_HOST` to the built plist (Xcode does not expand build
+  settings in plist keys, so `$(TURAS_SERVER_HOST)` as a source key never matches).
+  Release builds warn while the server is plain HTTP.
 - Some agent environments have no Swift toolchain. If you cannot compile, say so, keep
   changes small and reviewable, and rely on CI.
 
@@ -72,9 +74,11 @@ only backs the text field.
 
 ### Route identity
 
-A route is `RouteRef(name, agencyId)`. The agency ID is the prefix of the GTFS route_id
-(`5249` in `5249_119681`); `5242` is Luas, `5422` Irish Rail. 19 short names (220, 120,
-73, W2, ...) exist under two agencies, so the search chips show the operator name when a
+A route is `RouteRef(name, agencyId)`. The agency ID is whatever the server's `/routes`
+and `/vehicles` report (the GTFS `routes.txt` `agency_id`: `1` Dublin Bus, `2` Bus
+Éireann, `3` Go-Ahead, `10000` LUAS, `IR` Irish Rail, ...); never derive it from a
+route_id. Bundled routes carry no agency. Short names (220, 120, 73, W4, ...) can exist
+under two agencies, so the search chips show the operator name when a
 name is ambiguous, and requests send `agency=` when it is known. A nil agency lets the
 server choose (most trips; for arrivals, an agency serving the stop).
 
@@ -83,7 +87,9 @@ server choose (most trips; for arrivals, an agency serving the stop).
 `Turas/Resources/` holds data pre-processed from the TFI static GTFS feed (the scripts
 are not in the repo):
 
-- `route_lookup.json`: raw route_id -> short name (412 routes); gives agency prefixes.
+- `route_lookup.json`: raw route_id -> short name (412 routes). It predates TFI's current
+  free-form route_ids, so its `5242_`/`5422_` prefixes give the mode but its agency
+  prefixes are not the server's agency IDs and are ignored.
 - `headsign_lookup.json`: `"<name>_<direction>"` -> destination.
 - `route_stops.json`: short name -> `[{direction, stops: [{id, name, lat, lon, seq, t}]}]`.
   Keyed by name only, so shared names merge both agencies' entries.

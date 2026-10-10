@@ -16,12 +16,6 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(RouteRef(name: "220").matches(routeId: "220", agencyId: "5401"))
     }
 
-    func testAgencyIdFromRawRouteId() {
-        XCTAssertEqual(TransportMode.agencyId(fromRawRouteId: "5249_119681"), "5249")
-        XCTAssertNil(TransportMode.agencyId(fromRawRouteId: "5249"))
-        XCTAssertNil(TransportMode.agencyId(fromRawRouteId: "_1"))
-    }
-
     func testTransitRouteDecodesOlderServer() throws {
         // Before agency IDs and direction lists.
         let json = Data(#"[{"name":"39A","headsign_outbound":"Ongar"}]"#.utf8)

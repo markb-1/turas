@@ -90,7 +90,7 @@ This keeps the app:
 
 ### App Transport Security note
 
-The default xcconfig assumes HTTPS. For local development against an HTTP-only server, Debug builds carry an ATS exception for `$(TURAS_SERVER_HOST)` (`Supporting/Info-Debug.plist`). Release builds (`Supporting/Info.plist`) have no exception, so the Release server must use HTTPS. Set `TURAS_SERVER_HOST` to the host name only so the exception matches, and put any port in `TURAS_SERVER_URL` (e.g. `http:/$()/$(TURAS_SERVER_HOST):8080`).
+When `TURAS_SERVER_URL` is plain `http://`, a build phase (`Supporting/add-ats-exception.sh`) adds an App Transport Security exception for `TURAS_SERVER_HOST` to the built Info.plist; Xcode does not expand build settings in plist keys, so the exception cannot live in the source plist. Set `TURAS_SERVER_HOST` to the host name or IP only so the exception matches, and put any port in `TURAS_SERVER_URL` (e.g. `http:/$()/$(TURAS_SERVER_HOST):8080`). Release builds with an HTTP server get a build warning: serve the API over HTTPS before shipping to the App Store.
 
 ### Missing configuration
 
@@ -120,7 +120,7 @@ Turas/
 ├── ViewModels/MapViewModel   # selection state machine, 30s polling, vehicle filtering
 ├── Views/                    # SwiftUI views (Map, annotations, sheets, search bar)
 └── Resources/                # Bundled GTFS static JSON (stops, shapes, lookups)
-Supporting/                   # Info.plist (Release) and Info-Debug.plist
+Supporting/                   # Info.plist and the ATS build-phase script
 TurasTests/                   # unit tests and contract fixtures
 ```
 

@@ -48,6 +48,22 @@ final class FavouritesStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testEntryWithoutAgencyMatchesAnyAgency() {
+        // Saved from the bundled list (no agency), then the server's list
+        // arrives with agency IDs: still one entry, still starred.
+        let store = FavouritesStore(defaults: defaults)
+        store.toggleStar(entry("39A", agency: nil))
+        store.recordSelection(entry("39A", agency: nil))
+        XCTAssertTrue(store.isStarred(entry("39A", agency: "1")))
+
+        store.recordSelection(entry("39A", agency: "1"))
+        XCTAssertEqual(store.recents.map(\.route.agencyId), ["1"], "the agency-keyed entry replaces the old one")
+
+        store.toggleStar(entry("39A", agency: "1"))
+        XCTAssertTrue(store.starred.isEmpty)
+    }
+
+    @MainActor
     func testStarToggleAndPerModeFilter() {
         let store = FavouritesStore(defaults: defaults)
         let bus = entry("39A", direction: 0)
