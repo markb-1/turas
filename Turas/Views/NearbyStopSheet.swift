@@ -17,10 +17,12 @@ struct NearbyStopSheet: View {
                     .foregroundStyle(.white)
                     .padding(10)
                     .background(mode.color, in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(nearbyStop.stop.name)
                         .font(.title2.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     Text("\(nearbyStop.routeNames.count) route\(nearbyStop.routeNames.count == 1 ? "" : "s")")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -52,10 +54,13 @@ struct NearbyStopSheet: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
                             }
                             .padding(.vertical, 6)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(AccessibilityText.route(name: route))
+                        .accessibilityHint("Shows this route on the map")
                     }
                 }
             }

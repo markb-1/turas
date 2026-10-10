@@ -2,13 +2,14 @@ import SwiftUI
 
 /// Bottom sheet shown when a user taps a stop annotation.
 /// Fetches real-time arrival predictions — Luas uses the Luas Forecast API,
-/// buses and trains use TFI GTFS-RT TripUpdates.
+/// buses and trains use TFI GTFS-RT TripUpdates (both via the server).
 ///
-/// Arrivals matched to a live vehicle show in the mode's colour with a mode icon.
-/// "Ghost" vehicles (no matching live vehicle) show in grey with a clock icon.
+/// While the sheet is open it refreshes every 30 seconds; pull down to
+/// refresh sooner. Arrivals with a live vehicle show in the route's colour
+/// with a mode icon; scheduled ("ghost") arrivals show in grey with a clock.
 struct StopDetailSheet: View {
     let stop: RouteStop
-    let routeName: String
+    let route: RouteRef
     let direction: Int
     let mode: TransportMode
     let serverService: TurasServerService
@@ -16,58 +17,92 @@ struct StopDetailSheet: View {
     @State private var arrivals: [StopArrival] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var lastUpdated: Date?
 
-    private var routeColor: Color { mode.routeColor(for: routeName) }
+    private static let refreshInterval: Duration = .seconds(30)
+
+    private var routeColor: Color { mode.routeColor(for: route.name) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
-            HStack(spacing: 12) {
-                Image(systemName: mode.iconName)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(10)
-                    .background(routeColor, in: RoundedRectangle(cornerRadius: 10))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(stop.name)
-                        .font(.title2.weight(.semibold))
-                    Text("\(mode.label) \(routeName)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                Divider()
+
+                arrivalsSection
+
+                if let lastUpdated {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(ArrivalFormatting.updatedText(since: lastUpdated, now: context.date))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
             }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .refreshable {
+            await fetchArrivals()
+        }
+        .task {
+            await refreshPeriodically()
+        }
+    }
 
-            Divider()
+    // MARK: - Subviews
 
-            // Arrivals
-            if isLoading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Loading arrivals...")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            } else if let error = errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: mode.iconName)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(10)
+                .background(routeColor, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stop.name)
+                    .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                Text("\(mode.label) \(route.name)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            } else if arrivals.isEmpty {
-                Label("No upcoming arrivals", systemImage: "clock")
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var arrivalsSection: some View {
+        if isLoading && arrivals.isEmpty {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Loading arrivals...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        } else if arrivals.isEmpty {
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(arrivals.prefix(5)) { arrival in
-                    arrivalRow(arrival)
-                }
+                Label("No upcoming arrivals", systemImage: "clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-
-            Spacer()
-        }
-        .padding(20)
-        .task {
-            await fetchArrivals()
+        } else {
+            ForEach(arrivals.prefix(5)) { arrival in
+                arrivalRow(arrival)
+            }
+            if errorMessage != nil {
+                // Keep showing the last good arrivals; say the refresh failed.
+                Label("Couldn't refresh. Showing the last arrivals.", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -104,38 +139,50 @@ struct StopDetailSheet: View {
             Spacer()
 
             // Arrival time
-            Text(formattedArrivalTime(arrival.predictedArrival))
+            Text(ArrivalFormatting.minutesText(until: arrival.predictedArrival))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(arrival.isCancelled ? .red :
                                  arrival.isLive ? routeColor : .gray)
                 .strikethrough(arrival.isCancelled)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.arrival(arrival))
     }
 
-    private func formattedArrivalTime(_ date: Date) -> String {
-        let minutes = Int(date.timeIntervalSinceNow / 60)
-        if minutes < 1 { return "Due" }
-        if minutes == 1 { return "1 min" }
-        return "\(minutes) mins"
+    // MARK: - Loading
+
+    /// Fetches now and then every 30 seconds until the sheet goes away
+    /// (SwiftUI cancels the task on dismissal).
+    private func refreshPeriodically() async {
+        while !Task.isCancelled {
+            await fetchArrivals()
+            try? await Task.sleep(for: Self.refreshInterval)
+        }
     }
 
     private func fetchArrivals() async {
         do {
+            let result: [StopArrival]
             if mode == .luas {
-                arrivals = try await serverService.fetchLuasArrivals(
+                result = try await serverService.fetchLuasArrivals(
                     stopId: stop.id,
                     direction: direction,
-                    routeName: routeName
+                    routeName: route.name
                 )
             } else {
-                arrivals = try await serverService.fetchArrivals(
+                result = try await serverService.fetchArrivals(
                     stopId: stop.id,
-                    routeName: routeName,
+                    route: route,
                     direction: direction
                 )
             }
+            arrivals = result
+            errorMessage = nil
+            lastUpdated = Date()
         } catch {
-            errorMessage = "Unable to load arrivals: \(error.localizedDescription)"
+            if !MapViewModel.isCancellation(error) {
+                errorMessage = "Unable to load arrivals: \(error.localizedDescription)"
+            }
         }
         isLoading = false
     }

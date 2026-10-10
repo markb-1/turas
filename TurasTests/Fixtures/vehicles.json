@@ -1,0 +1,26 @@
+[
+  {
+    "id": "V1234",
+    "trip_id": "5249_12345_1_0",
+    "route": "39A",
+    "agency_id": "5249",
+    "headsign": "Ongar",
+    "direction": 0,
+    "lat": 53.349806,
+    "lon": -6.26031,
+    "bearing": 147.5,
+    "timestamp": "2026-10-10T11:00:00Z",
+    "mode": "bus"
+  },
+  {
+    "id": "E250",
+    "trip_id": "E250",
+    "route": "DART",
+    "agency_id": "5422",
+    "direction": 1,
+    "lat": 53.3531,
+    "lon": -6.24591,
+    "timestamp": "2026-10-10T11:00:00Z",
+    "mode": "train"
+  }
+]

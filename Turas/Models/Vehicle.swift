@@ -1,28 +1,24 @@
-import Foundation
 import CoreLocation
+import Foundation
 
-/// A live transit vehicle parsed from the GTFS-RT feed.
-struct Vehicle: Identifiable, Equatable {
-    let id: String          // GTFS vehicle ID
+/// A live transit vehicle reported by the Turas server.
+///
+/// Position is stored as plain doubles so `Equatable` can be synthesized;
+/// `coordinate` builds the MapKit value on demand.
+struct Vehicle: Identifiable, Equatable, Sendable {
+    let id: String          // Vehicle ID (Irish Rail: train code)
     let tripId: String      // GTFS trip ID (for ghost bus matching)
-    let routeId: String     // e.g. "39A", "Green", "DART"
+    let routeId: String     // Public route name, e.g. "39A", "Green", "DART"
+    let agencyId: String?   // Agency prefix, e.g. "5249"; tells same-named routes apart
     let headsign: String?   // Destination, e.g. "UCD Belfield"
     let direction: Int      // 0 = outbound, 1 = inbound
-    let coordinate: CLLocationCoordinate2D
-    let bearing: Float?     // Direction of travel in degrees
+    let latitude: Double
+    let longitude: Double
+    let bearing: Float?     // Direction of travel in degrees clockwise from north
     let timestamp: Date     // Last reported time
     let mode: TransportMode // Bus, Luas, or Train
 
-    static func == (lhs: Vehicle, rhs: Vehicle) -> Bool {
-        lhs.id == rhs.id
-            && lhs.tripId == rhs.tripId
-            && lhs.routeId == rhs.routeId
-            && lhs.headsign == rhs.headsign
-            && lhs.direction == rhs.direction
-            && lhs.coordinate.latitude == rhs.coordinate.latitude
-            && lhs.coordinate.longitude == rhs.coordinate.longitude
-            && lhs.bearing == rhs.bearing
-            && lhs.timestamp == rhs.timestamp
-            && lhs.mode == rhs.mode
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }

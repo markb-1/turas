@@ -20,17 +20,6 @@
 	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>${TURAS_SERVER_HOST}</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-		</dict>
-	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Turas uses your location to centre the map and show nearby buses.</string>
 	<key>TURAS_SERVER_API_KEY</key>

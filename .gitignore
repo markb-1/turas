@@ -1,4 +1,6 @@
 # Xcode
+# The project is generated from project.yml by XcodeGen; never commit it.
+Turas.xcodeproj/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
@@ -24,7 +26,6 @@ Configuration/*.xcconfig
 
 # Claude Code
 .claude/
-CLAUDE.md
 Change Logs/
 
 # Build scripts (dev-only, not needed at runtime)
