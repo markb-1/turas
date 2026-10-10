@@ -39,3 +39,6 @@ Scripts/
 
 # CocoaPods (not used, but just in case)
 Pods/
+
+# Brainstorming companion mockups
+.superpowers/
