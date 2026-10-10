@@ -31,3 +31,20 @@ targets:
     configFiles:
       Debug: Configuration/Debug.xcconfig
       Release: Configuration/Release.xcconfig
+    scheme:
+      testTargets:
+        - TurasTests
+      gatherCoverageData: true
+
+  TurasTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      # Fixtures/*.json are copied flat into the test bundle as resources.
+      - path: TurasTests
+    dependencies:
+      - target: Turas
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES

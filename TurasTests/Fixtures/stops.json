@@ -1,0 +1,19 @@
+[
+  {
+    "id": "8220DB000002",
+    "name": "Parnell Square West",
+    "lat": 53.352241,
+    "lon": -6.263695,
+    "seq": 1,
+    "t": 0
+  },
+  {
+    "id": "8250GA00286",
+    "name": "Dundrum",
+    "lat": 53.292239,
+    "lon": -6.245131,
+    "seq": 2,
+    "t": 95,
+    "luas_code": "DUN"
+  }
+]

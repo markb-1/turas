@@ -1,0 +1,27 @@
+[
+  {
+    "name": "220",
+    "agency_id": "5249",
+    "agency_name": "Dublin Bus",
+    "headsign_outbound": "Lady's Well",
+    "headsign_inbound": "Ballymun",
+    "directions": [
+      0,
+      1
+    ]
+  },
+  {
+    "name": "220",
+    "agency_id": "5401",
+    "agency_name": "Bus Éireann",
+    "headsign_outbound": "Ballincollig",
+    "directions": [
+      0
+    ]
+  },
+  {
+    "name": "447",
+    "agency_id": "5249",
+    "directions": []
+  }
+]

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Write placeholder configuration
+        # The real xcconfig files hold the server address and API key and
+        # are never committed. Tests do not talk to a server.
+        run: |
+          mkdir -p Configuration
+          for config in Debug Release; do
+            printf '%s\n' \
+              'TURAS_SERVER_HOST = localhost' \
+              'TURAS_SERVER_URL = http:/$()/$(TURAS_SERVER_HOST):8080' \
+              'TURAS_SERVER_API_KEY = ci-placeholder' \
+              > "Configuration/${config}.xcconfig"
+          done
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list --json devices available | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in runtimes if ".iOS-" in r), reverse=True)
+          print(next(d["udid"] for r in ios for d in runtimes[r] if d["name"].startswith("iPhone")))
+          ')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Turas.xcodeproj \
+            -scheme Turas \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO

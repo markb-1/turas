@@ -1,0 +1,28 @@
+[
+  {
+    "trip_id": "5249_12345_1_0",
+    "route": "39A",
+    "headsign": "Ongar",
+    "delay": 120,
+    "predicted_arrival": "2026-10-10T11:04:00Z",
+    "is_live": true,
+    "is_cancelled": false
+  },
+  {
+    "trip_id": "5249_12346_1_0",
+    "route": "39A",
+    "headsign": "Ongar",
+    "delay": 0,
+    "predicted_arrival": "2026-10-10T11:19:00Z",
+    "is_live": false,
+    "is_cancelled": false
+  },
+  {
+    "trip_id": "5249_12347_1_0",
+    "route": "39A",
+    "delay": 0,
+    "predicted_arrival": "2026-10-10T11:34:00Z",
+    "is_live": false,
+    "is_cancelled": true
+  }
+]
