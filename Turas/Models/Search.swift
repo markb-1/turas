@@ -62,7 +62,7 @@ struct StopSearchResult: Decodable, Identifiable, Hashable, Sendable {
 }
 
 /// A route found by short name or headsign. Selecting it opens route focus.
-struct RouteSearchResult: Decodable, Identifiable, Hashable, Sendable {
+struct RouteSearchResult: RouteLabelling, Decodable, Identifiable, Hashable, Sendable {
     let name: String
     let agencyId: String
     let agencyName: String?
@@ -72,20 +72,6 @@ struct RouteSearchResult: Decodable, Identifiable, Hashable, Sendable {
 
     var id: String { "\(agencyId)|\(name)" }
     var ref: RouteRef { RouteRef(name: name, agencyId: agencyId) }
-
-    /// Agency name for display, falling back to the agency ID.
-    var operatorLabel: String {
-        if let agencyName, !agencyName.isEmpty {
-            return agencyName
-        }
-        return agencyId.isEmpty ? "Unknown operator" : "Operator \(agencyId)"
-    }
-
-    func headsign(for direction: Int) -> String? {
-        let headsign = direction == 0 ? headsignOutbound : headsignInbound
-        guard let headsign, !headsign.isEmpty else { return nil }
-        return headsign
-    }
 
     init(
         name: String,

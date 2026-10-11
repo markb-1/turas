@@ -2,7 +2,7 @@ import Foundation
 
 /// A selectable route, as listed by the server's /api/v1/routes (or built
 /// from the bundled lookups when the server has never been reached).
-struct TransitRoute: Codable, Hashable, Identifiable, Sendable {
+struct TransitRoute: RouteLabelling, Codable, Hashable, Identifiable, Sendable {
     let name: String
     let agencyId: String
     let agencyName: String?
@@ -13,20 +13,6 @@ struct TransitRoute: Codable, Hashable, Identifiable, Sendable {
 
     var id: String { "\(agencyId)|\(name)" }
     var ref: RouteRef { RouteRef(name: name, agencyId: agencyId) }
-
-    /// Agency name for display, falling back to the agency ID.
-    var operatorLabel: String {
-        if let agencyName, !agencyName.isEmpty {
-            return agencyName
-        }
-        return agencyId.isEmpty ? "Unknown operator" : "Operator \(agencyId)"
-    }
-
-    func headsign(for direction: Int) -> String? {
-        let headsign = direction == 0 ? headsignOutbound : headsignInbound
-        guard let headsign, !headsign.isEmpty else { return nil }
-        return headsign
-    }
 
     enum CodingKeys: String, CodingKey {
         case name
