@@ -107,6 +107,14 @@ final class FormattingTests: XCTestCase {
             "39A to Ongar from College Green, 90 metres. Cancelled, 3 minutes, then 10 cancelled and 20 minutes."
         )
         XCTAssertEqual(
+            AccessibilityText.departure(row([time(0), time(1, cancelled: true)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, due now, then 1 cancelled minute."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2), time(0)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, 2 minutes, then due now."
+        )
+        XCTAssertEqual(
             AccessibilityText.departure(row([]), stopName: "College Green", now: now),
             "39A to Ongar from College Green, 90 metres. No times."
         )

@@ -163,16 +163,16 @@ enum AccessibilityText {
         var text = label + "\(source), \(minutesPhrase(until: first.at, now: now))"
 
         let later = departure.times.dropFirst()
-        if let onlyLater = later.first, later.count == 1,
-           DepartureFormatting.wholeMinutes(until: onlyLater.at, now: now) == 1 {
-            text += ", then 1 minute"
-        } else if !later.isEmpty {
+        if !later.isEmpty {
             let parts = later.map { time -> String in
                 let minutes = DepartureFormatting.wholeMinutes(until: time.at, now: now)
                 let part = minutes < 1 ? "due now" : "\(minutes)"
                 return time.cancelled ? "\(part) cancelled" : part
             }
-            text += ", then \(parts.joined(separator: " and ")) minutes"
+            // A lone later time takes its own unit ("1 minute", none for "due now").
+            let lone = later.count == 1 ? later.first.map { DepartureFormatting.wholeMinutes(until: $0.at, now: now) } : nil
+            let unit = lone.map { $0 < 1 ? "" : ($0 == 1 ? " minute" : " minutes") } ?? " minutes"
+            text += ", then \(parts.joined(separator: " and "))\(unit)"
         }
         return text + "."
     }
