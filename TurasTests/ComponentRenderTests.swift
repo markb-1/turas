@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import SwiftUI
 import XCTest
@@ -57,6 +58,18 @@ final class ComponentRenderTests: XCTestCase {
         render(RouteFocusView(focus: focus, onBack: {}))
     }
 
+    func testHomeViewRenders() {
+        let clock = ManualClock()
+        let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
+        let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
+        let store = StaticDataStore(source: EmptyStaticSource(), bundledStops: RouteStopService(stopsByRoute: [:]), cacheDirectory: nil, bundledRoutes: { [:] })
+        let model = HomeModel(nearby: nearby, search: search, location: RenderLocation()) { target, centre, userLocation in
+            RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: FakeFocusSource(),
+                            staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
+        }
+        render(HomeView(model: model))
+    }
+
     func testStopSubtitleShowsModesAndDistanceFromCentre() {
         let centre = CLLocationCoordinate2D(latitude: 53.3400, longitude: -6.2600)
         let near = StopSearchResult(id: "a", name: "Dun Laoghaire SC", lat: 53.3409, lon: -6.2600, modes: [.bus])
@@ -75,4 +88,12 @@ private actor NoPlaceSearch: PlaceSearching {
 private actor EmptyStaticSource: StaticDataSource {
     func fetchRoutes(mode: TransportMode) async throws -> [TransitRoute] { [] }
     func fetchStops(route: String, agency: String?, direction: Int) async throws -> [RouteStop] { [] }
+}
+
+@MainActor
+private final class RenderLocation: LocationProviding {
+    var userLocation: CLLocationCoordinate2D? { nil }
+    var authorizationStatus: CLAuthorizationStatus { .denied }
+    var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> { Just(.denied).eraseToAnyPublisher() }
+    func requestLocation() async -> CLLocationCoordinate2D? { nil }
 }
