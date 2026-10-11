@@ -51,11 +51,11 @@ final class AppDependencies {
     let favourites: FavouritesStore
     let placeSearch: PlaceSearching
 
-    init(config: ServerConfig) {
+    init(config: ServerConfig, environment: [String: String] = ProcessInfo.processInfo.environment) {
         var session: URLSession?
         var placeSearch: PlaceSearching = MapKitPlaceSearch()
         #if DEBUG
-        if ProcessInfo.processInfo.environment["TURAS_UITEST_STUB"] == "1" {
+        if Self.isUITestStub(environment) {
             session = UITestStubServer.session()
             placeSearch = UITestStubPlaceSearch()
         }
@@ -67,9 +67,30 @@ final class AppDependencies {
         self.locationService = LocationService()
         self.routeShapeService = RouteShapeService()
         self.routeStopService = routeStopService
-        self.staticData = StaticDataStore(source: serverService, bundledStops: routeStopService)
+        self.staticData = StaticDataStore(
+            source: serverService,
+            bundledStops: routeStopService,
+            cacheDirectory: Self.staticDataCacheDirectory(environment: environment)
+        )
         self.favourites = FavouritesStore()
     }
+
+    /// Where StaticDataStore caches routes and stops. A UI-test stub run
+    /// keeps them in memory only: canned answers on disk would outlive the
+    /// run by 7 days and show up in later live runs.
+    nonisolated static func staticDataCacheDirectory(environment: [String: String]) -> URL? {
+        #if DEBUG
+        if isUITestStub(environment) { return nil }
+        #endif
+        return StaticDataStore.defaultCacheDirectory()
+    }
+
+    #if DEBUG
+    /// Launched by the UI tests against the in-app stub server.
+    nonisolated static func isUITestStub(_ environment: [String: String]) -> Bool {
+        environment["TURAS_UITEST_STUB"] == "1"
+    }
+    #endif
 
     /// The home screen's models, wired to the live services.
     func makeHomeModel() -> HomeModel {

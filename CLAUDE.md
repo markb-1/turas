@@ -23,6 +23,9 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
   an exception for `TURAS_SERVER_HOST` to the built plist (Xcode does not expand build
   settings in plist keys, so `$(TURAS_SERVER_HOST)` as a source key never matches).
   Release builds warn while the server is plain HTTP.
+- UI-test stub runs keep routes and stops in memory only. Older Debug builds wrote the
+  stub's answers to `Caches/StaticData` for 7 days, so a simulator that ran them needs
+  `xcrun simctl uninstall <id> com.turas.Turas` once before a live run.
 - Some agent environments have no Swift toolchain. If you cannot compile, say so, keep
   changes small and reviewable, and rely on CI.
 
