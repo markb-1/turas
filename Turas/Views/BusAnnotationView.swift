@@ -18,18 +18,18 @@ struct BusAnnotationView: View {
         HStack(spacing: 2) {
             Text(routeId)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.badgeTextColor(mode: mode, route: routeId))
 
             if let bearing {
                 Image(systemName: "location.north.fill")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Theme.badgeTextColor(mode: mode, route: routeId).opacity(0.9))
                     .rotationEffect(.degrees(Double(bearing)))
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(mode.routeColor(for: routeId), in: Capsule())
+        .background(Theme.lineColor(mode: mode, route: routeId), in: Capsule())
     }
 }
 
