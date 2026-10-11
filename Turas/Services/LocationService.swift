@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 
@@ -112,5 +113,25 @@ extension LocationService: CLLocationManagerDelegate {
         MainActor.assumeIsolated {
             authorizationDidChange(to: status)
         }
+    }
+}
+
+// MARK: - LocationProviding
+
+/// What HomeModel needs from the location service, so tests can fake it
+/// without a CLLocationManager.
+@MainActor
+protocol LocationProviding: AnyObject {
+    var userLocation: CLLocationCoordinate2D? { get }
+    var authorizationStatus: CLAuthorizationStatus { get }
+    var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> { get }
+    /// Asks for permission if needed, then returns the location once; nil
+    /// when denied or no fix is available.
+    func requestLocation() async -> CLLocationCoordinate2D?
+}
+
+extension LocationService: LocationProviding {
+    var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> {
+        $authorizationStatus.eraseToAnyPublisher()
     }
 }
