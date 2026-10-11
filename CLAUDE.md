@@ -46,7 +46,8 @@ Turas/
     StaticDataStore         actor; routes/stops from server -> disk cache -> bundle
     RouteStopService        actor; bundled route_stops.json
     RouteShapeService       actor; bundled route_shapes.json
-    PlaceSearchService      PlaceSearching; MapKitPlaceSearch (MKLocalSearch) limited to Ireland
+    PlaceSearchService      PlaceSearching; MapKitPlaceSearch (MKLocalSearch) limited to Ireland,
+                            addresses and points of interest as two requests
     LocationService         @MainActor CLLocationManager wrapper; LocationProviding
     AppClock                now + sleep, injected into the models
     FavouritesStore         @MainActor recents and starred routes (no UI yet)

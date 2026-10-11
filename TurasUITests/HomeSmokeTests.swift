@@ -1,8 +1,8 @@
 import XCTest
 
-/// Walks the home screen: timeline → Luas and Train tabs → search (stop,
-/// route, place) → route focus → flip → back, attaching a screenshot at
-/// each step. Runs against the in-app stub by default; with
+/// Walks the home screen: timeline → Luas and Train tabs → stop search →
+/// route search → route focus → flip → back → a row's focus → place
+/// search, attaching a screenshot at each step. Runs against the in-app stub by default; with
 /// TEST_RUNNER_TURAS_UITEST_LIVE=1 it uses the real server.
 ///
 /// Before running: set the simulator's location (College Green) and, to
@@ -57,6 +57,12 @@ final class HomeSmokeTests: XCTestCase {
         let element = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix)).firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "\(prefix) result appears", file: file, line: line)
         return element
+    }
+
+    /// Waits for an element to go (`waitForNonExistence` needs Xcode 16).
+    private func waitForDisappearance(_ element: XCUIElement) -> Bool {
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
+        return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
     }
 
     /// Any element by identifier (SwiftUI containers appear as "other" elements).
@@ -118,19 +124,21 @@ final class HomeSmokeTests: XCTestCase {
         XCTAssertFalse(element("focus.panel").exists)
         snapshot("after-back")
 
-        // Place search: flies the map.
-        search("Phoenix")
-        let place = firstMatch(prefix: "search.place.")
-        snapshot("search-place")
-        place.tap()
-        XCTAssertTrue(app.textFields["home.search.field"].waitForExistence(timeout: timeout))
-        snapshot("after-place")
-
         // A row opens focus too.
         firstRow().tap()
         XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
         app.buttons["focus.back"].tap()
         _ = firstRow()
+
+        // Place search: flies the map. Live, Phoenix Park has nothing
+        // leaving within 500 m, so no rows are expected after it.
+        search("Phoenix")
+        let place = firstMatch(prefix: "search.place.")
+        snapshot("search-place")
+        place.tap()
+        XCTAssertTrue(app.textFields["home.search.field"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(waitForDisappearance(element("search.results")), "back to the timeline panel")
+        snapshot("after-place")
     }
 
     func testTimelineAtAccessibilityTextSize() {
