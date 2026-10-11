@@ -234,6 +234,24 @@ final class HomeModelTests: XCTestCase {
         XCTAssertEqual(model.search.query, "")
     }
 
+    func testSearchDuringFocusClosesFocusFirst() async {
+        let model = makeModel()
+        await loadTimeline(model)
+        model.openFocus(departure: model.nearby.departures[0])
+        XCTAssertNotNil(model.focus)
+        await waitUntil("focus polling") { self.focusSource.arrivalFetchCount == 1 }
+        await waitUntil("only focus sleeps") { self.clock.sleeperCount == 1 }
+
+        model.beginSearch()
+        XCTAssertEqual(model.screen, .search, "the field takes input, so its results must show")
+        XCTAssertNil(model.focus)
+        await waitUntil("nearby resumed") { self.nearbySource.callCount == 2 }
+        assertCentre(model.cameraPosition, is: collegeGreen, "the map is back where the timeline was")
+
+        model.cancelSearch()
+        XCTAssertEqual(model.screen, .timeline)
+    }
+
     func testStopResultFliesTheMapAndReturnsToTheTimeline() {
         let model = makeModel()
         model.beginSearch()

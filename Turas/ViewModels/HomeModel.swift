@@ -207,8 +207,17 @@ final class HomeModel: ObservableObject {
 
     // MARK: - Search
 
+    /// The search field took focus. It shows in every state, so from route
+    /// focus the timeline comes back first and search opens over it.
     func beginSearch() {
-        guard screen == .timeline else { return }
+        switch screen {
+        case .timeline:
+            break
+        case .focus:
+            closeFocus()
+        case .search:
+            return
+        }
         screen = .search
     }
 
