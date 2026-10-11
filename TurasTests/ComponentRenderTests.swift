@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 import XCTest
 @testable import Turas
@@ -40,8 +41,38 @@ final class ComponentRenderTests: XCTestCase {
         render(StatusBanner(kind: .progress, message: "Turas is starting up…"))
         render(BusAnnotationView(routeId: "DART", bearing: 90, mode: .train))
     }
+    func testPanelsRender() async {
+        let clock = ManualClock()
+        let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
+        render(DepartureTimeline(nearby: nearby, mode: .bus, scrollToRow: .constant(nil), onSelect: { _ in }, onRetry: {}))
+
+        let centre = CLLocationCoordinate2D(latitude: 53.34, longitude: -6.26)
+        let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
+        render(SearchResultsView(search: search, mapCentre: centre, onSelectStop: { _ in }, onSelectRoute: { _ in }, onSelectPlace: { _ in }))
+
+        let target = RouteFocusTarget(route: RouteRef(name: "39A", agencyId: "1"), mode: .bus, direction: 0, headsign: "Ongar", stop: nil)
+        let store = StaticDataStore(source: EmptyStaticSource(), bundledStops: RouteStopService(stopsByRoute: [:]), cacheDirectory: nil, bundledRoutes: { [:] })
+        let focus = RouteFocusModel(target: target, centre: centre, userLocation: nil,
+                                    source: FakeFocusSource(), staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
+        render(RouteFocusView(focus: focus, onBack: {}))
+    }
+
+    func testStopSubtitleShowsModesAndDistanceFromCentre() {
+        let centre = CLLocationCoordinate2D(latitude: 53.3400, longitude: -6.2600)
+        let near = StopSearchResult(id: "a", name: "Dun Laoghaire SC", lat: 53.3409, lon: -6.2600, modes: [.bus])
+        XCTAssertEqual(SearchResultsView.stopSubtitle(near, from: centre), "Bus · 100 m")
+        let far = StopSearchResult(id: "b", name: "Dun Laoghaire SC", lat: 53.3500, lon: -6.2600, modes: [.bus, .luas])
+        XCTAssertEqual(SearchResultsView.stopSubtitle(far, from: centre), "Bus · Luas · 1.1 km")
+        let none = StopSearchResult(id: "c", name: "X", lat: 53.3409, lon: -6.2600, modes: [])
+        XCTAssertEqual(SearchResultsView.stopSubtitle(none, from: centre), "100 m")
+    }
 }
 
 private actor NoPlaceSearch: PlaceSearching {
     func searchPlaces(_ query: String) async throws -> [PlaceResult] { [] }
+}
+
+private actor EmptyStaticSource: StaticDataSource {
+    func fetchRoutes(mode: TransportMode) async throws -> [TransitRoute] { [] }
+    func fetchStops(route: String, agency: String?, direction: Int) async throws -> [RouteStop] { [] }
 }
