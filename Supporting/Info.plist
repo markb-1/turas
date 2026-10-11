@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Turas uses your location to centre the map and show nearby buses.</string>
+	<string>Turas uses your location to show what's leaving near you.</string>
 	<key>TURAS_SERVER_API_KEY</key>
 	<string>$(TURAS_SERVER_API_KEY)</string>
 	<key>TURAS_SERVER_URL</key>

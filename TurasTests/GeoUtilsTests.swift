@@ -24,4 +24,11 @@ final class GeoUtilsTests: XCTestCase {
         // O'Connell Bridge to Heuston, roughly 2.2 km; matches the server's geo test.
         XCTAssertEqual(there, 2190, accuracy: 30)
     }
+
+    func testWalkingMinutes() {
+        XCTAssertEqual(GeoUtils.walkingMinutes(metres: 0), 1, "never less than a minute")
+        XCTAssertEqual(GeoUtils.walkingMinutes(metres: 90), 1)
+        // 400 m * 1.3 road factor / 1.33 m/s = 391 s = 6 min
+        XCTAssertEqual(GeoUtils.walkingMinutes(metres: 400), 6)
+    }
 }

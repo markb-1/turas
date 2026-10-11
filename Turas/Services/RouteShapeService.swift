@@ -27,11 +27,6 @@ actor RouteShapeService {
         loaded()[routeName] ?? []
     }
 
-    /// Directions (0/1) that have a shape for this route.
-    func directions(for routeName: String) -> Set<Int> {
-        Set(shapes(for: routeName).map(\.direction))
-    }
-
     private func loaded() -> [String: [RouteShape]] {
         if let shapesByRoute {
             return shapesByRoute

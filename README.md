@@ -4,14 +4,13 @@ A real-time public transport tracker for iOS, covering bus, Luas, and rail servi
 
 ## Features
 
-- **Live vehicle positions** on the map for buses, Luas and trains, refreshed every 30 seconds
-- **Real-time arrival predictions** at any stop, combining scheduled times with live delay data; the stop sheet refreshes every 30 seconds and supports pull to refresh
-- **Per-mode filtering** — switch between Bus, Luas, and Train
-- **Route search** across every route nationwide with directional headsigns; route names shared by two operators (e.g. 220) show the operator
-- **Starred and recent routes** one tap away in search
-- **Nearest-stop detection** with walking-time estimates
-- **VoiceOver support** for the map, search and arrivals
-- **Offline-friendly** — route lists and stops are cached for a week, with bundled GTFS data as a fallback, so routes and stops draw instantly
+- **What's leaving near you** — the timeline shows the next departures around the map centre, one row per route and direction from its nearest stop, with the next three times; drag the map and it follows
+- **Search** stops, routes and places (Apple Maps, Ireland only) from one box
+- **Route focus** — tap a row to see the route's line, its live vehicles and the next times at that stop; flip direction with ⇄
+- **Bus, Luas and Train** tabs
+- **Live, scheduled, late and cancelled** states, refreshed every 30 s
+- **Works without location** — say "Not now" and the map starts at O'Connell Bridge
+- **VoiceOver and Dynamic Type** throughout
 
 ## Architecture
 
@@ -104,7 +103,7 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
   -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-The `TurasTests` unit tests cover distance and mode helpers, the bundled stop search, search matching and direction options, configuration parsing, the server client (through a `URLProtocol` stub), the static-data cache, favourites, VoiceOver text, and decoding of the server's golden JSON in `TurasTests/Fixtures/` (byte-identical copies of the server's `testdata/contract/`).
+The `TurasTests` unit tests cover distance and mode helpers, the home, nearby, search and route-focus models, configuration parsing, the server client (through a `URLProtocol` stub), the static-data cache, favourites, VoiceOver text, and decoding of the server's golden JSON in `TurasTests/Fixtures/` (byte-identical copies of the server's `testdata/contract/`).
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the tests on every push and pull request on macOS, with placeholder xcconfig files.
 
@@ -117,8 +116,9 @@ Turas/
 ├── Models/                   # Vehicle, StopArrival, RouteStop, RouteRef, TransitRoute, …
 ├── Services/                 # TurasServerService, StaticDataStore, LocationService,
 │                             # FavouritesStore, bundled-data loaders
-├── ViewModels/MapViewModel   # selection state machine, 30s polling, vehicle filtering
-├── Views/                    # SwiftUI views (Map, annotations, sheets, search bar)
+├── Theme.swift               # colour tokens, line colours, metrics
+├── ViewModels/               # HomeModel, NearbyModel, SearchModel, RouteFocusModel
+├── Views/                    # Home/ (map, timeline, search, route focus) and Components/
 └── Resources/                # Bundled GTFS static JSON (stops, shapes, lookups)
 Supporting/                   # Info.plist and the ATS build-phase script
 TurasTests/                   # unit tests and contract fixtures

@@ -43,6 +43,12 @@ jobs:
           ')
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
+      - name: Boot the simulator at College Green
+        run: |
+          xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
+          xcrun simctl location "${{ steps.simulator.outputs.udid }}" set 53.3441,-6.2595
+
       - name: Test
         run: |
           set -o pipefail

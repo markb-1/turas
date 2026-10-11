@@ -1,5 +1,79 @@
 import Foundation
 
+/// Text for timeline rows.
+enum DepartureFormatting {
+    /// The big first time: "Due", "1 min", "14 min".
+    static func firstTimeText(at date: Date, now: Date = Date()) -> String {
+        let minutes = wholeMinutes(until: date, now: now)
+        if minutes < 1 { return "Due" }
+        return "\(minutes) min"
+    }
+
+    /// Later times are just the minutes: "14", "27"; "Due" under a minute.
+    static func laterTimeText(at date: Date, now: Date = Date()) -> String {
+        let minutes = wholeMinutes(until: date, now: now)
+        if minutes < 1 { return "Due" }
+        return "\(minutes)"
+    }
+
+    /// "90 m" or "1.3 km".
+    static func distanceText(metres: Int) -> String {
+        if metres < 1000 { return "\(metres) m" }
+        return "\(kilometres(metres)) km"
+    }
+
+    /// Kilometres to one decimal, rounding half up on whole metres ("1.3" for
+    /// 1250 m; `%.1f` alone would give "1.2" through binary rounding).
+    static func kilometres(_ metres: Int) -> String {
+        String(format: "%.1f", (Double(metres) / 100).rounded() / 10)
+    }
+
+    /// "4 min walk".
+    static func walkText(minutes: Int) -> String {
+        "\(minutes) min walk"
+    }
+
+    static func wholeMinutes(until date: Date, now: Date) -> Int {
+        Int(date.timeIntervalSince(now) / 60)
+    }
+}
+
+/// User-facing text for server and network errors, shared by the models.
+enum ServerErrorText {
+    static func message(for error: Error) -> String {
+        if let serverError = error as? TurasServerError {
+            switch serverError {
+            case .httpError(let code):
+                switch code {
+                case 401, 403:
+                    return "API key issue. Check configuration."
+                case 429:
+                    return "Too many requests. Retrying..."
+                case 503:
+                    return "Server is starting up. Retrying..."
+                case 500...:
+                    return "Service temporarily unavailable. Retrying..."
+                default:
+                    return "Network error (\(code)). Check your connection."
+                }
+            case .invalidURL, .invalidResponse:
+                return "Server error. Retrying..."
+            }
+        }
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "No internet connection. Check your network."
+        }
+        return "Something went wrong. Retrying..."
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        return (error as? URLError)?.code == .cancelled
+    }
+}
+
 /// Text shown for arrivals, kept out of the views so it can be tested.
 enum ArrivalFormatting {
     /// "Due", "1 min", "12 mins".
@@ -33,12 +107,14 @@ enum AccessibilityText {
         return "Route \(name), \(operatorName)"
     }
 
-    /// "Stop, Parnell Square West" or "Nearest stop, Parnell Square West, 4 minute walk".
-    static func stop(name: String, isNearest: Bool = false, walkingMinutes: Int? = nil) -> String {
-        guard isNearest else { return "Stop, \(name)" }
-        guard let walkingMinutes else { return "Nearest stop, \(name)" }
-        let unit = walkingMinutes == 1 ? "minute" : "minutes"
-        return "Nearest stop, \(name), \(walkingMinutes) \(unit) walk"
+    /// "90 metres" or "1.3 kilometres".
+    static func distance(metres: Int) -> String {
+        metres < 1000 ? "\(metres) metres" : "\(DepartureFormatting.kilometres(metres)) kilometres"
+    }
+
+    /// "Stop, Parnell Square West".
+    static func stop(name: String) -> String {
+        "Stop, \(name)"
     }
 
     /// "To Ongar, in 5 minutes, live, 2 minutes late".
@@ -63,5 +139,47 @@ enum AccessibilityText {
             parts.append(late == 1 ? "1 minute late" : "\(late) minutes late")
         }
         return parts.joined(separator: ", ")
+    }
+
+    /// One label per timeline row: "39A to Ongar from College Green, 90
+    /// metres. Live, 2 minutes, then 14 and 27 minutes."
+    static func departure(_ departure: NearbyDeparture, stopName: String, now: Date = Date()) -> String {
+        let label = "\(departure.route) to \(departure.destination) from \(stopName), \(distance(metres: departure.distanceM)). "
+
+        guard let first = departure.times.first else {
+            return label + "No times."
+        }
+        let source: String
+        if first.cancelled {
+            source = "Cancelled"
+        } else {
+            switch first.source {
+            case .live: source = "Live"
+            case .realtime: source = "Estimated"
+            case .timetable: source = "Scheduled"
+            }
+        }
+        var text = label + "\(source), \(minutesPhrase(until: first.at, now: now))"
+
+        let later = departure.times.dropFirst()
+        if !later.isEmpty {
+            let parts = later.map { time -> String in
+                let minutes = DepartureFormatting.wholeMinutes(until: time.at, now: now)
+                let part = minutes < 1 ? "due now" : "\(minutes)"
+                return time.cancelled ? "\(part) cancelled" : part
+            }
+            // A lone later time takes its own unit ("1 minute", none for "due now").
+            let lone = later.count == 1 ? later.first.map { DepartureFormatting.wholeMinutes(until: $0.at, now: now) } : nil
+            let unit = lone.map { $0 < 1 ? "" : ($0 == 1 ? " minute" : " minutes") } ?? " minutes"
+            text += ", then \(parts.joined(separator: " and "))\(unit)"
+        }
+        return text + "."
+    }
+
+    /// "due now", "1 minute", "14 minutes".
+    private static func minutesPhrase(until date: Date, now: Date) -> String {
+        let minutes = DepartureFormatting.wholeMinutes(until: date, now: now)
+        if minutes < 1 { return "due now" }
+        return minutes == 1 ? "1 minute" : "\(minutes) minutes"
     }
 }

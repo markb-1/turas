@@ -89,6 +89,30 @@ actor TurasServerService {
         return (response ?? []).map(\.stopArrival)
     }
 
+    // MARK: - Home screen
+
+    /// Fetches what is leaving near a point for one mode: the rows of the
+    /// timeline and the stops they use.
+    func fetchNearby(lat: Double, lon: Double, mode: TransportMode) async throws -> NearbyResponse {
+        let data = try await get("/api/v1/nearby", query: [
+            URLQueryItem(name: "lat", value: String(format: "%.6f", lat)),
+            URLQueryItem(name: "lon", value: String(format: "%.6f", lon)),
+            URLQueryItem(name: "mode", value: mode.rawValue),
+        ])
+        return try ServerJSON.decoder.decode(NearbyResponse.self, from: data)
+    }
+
+    /// Searches stops and routes by name. With a mode, that mode's results
+    /// come first.
+    func search(query: String, mode: TransportMode?) async throws -> SearchResponse {
+        var items = [URLQueryItem(name: "q", value: query)]
+        if let mode {
+            items.append(URLQueryItem(name: "mode", value: mode.rawValue))
+        }
+        let data = try await get("/api/v1/search", query: items)
+        return try ServerJSON.decoder.decode(SearchResponse.self, from: data)
+    }
+
     // MARK: - Private
 
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
@@ -139,6 +163,27 @@ protocol StaticDataSource: Sendable {
 }
 
 extension TurasServerService: StaticDataSource {}
+
+// MARK: - Home screen sources
+
+/// Where NearbyModel gets its rows. TurasServerService in the app; a fake in tests.
+protocol NearbySource: Sendable {
+    func fetchNearby(lat: Double, lon: Double, mode: TransportMode) async throws -> NearbyResponse
+}
+
+/// Where SearchModel gets stop and route matches.
+protocol SearchSource: Sendable {
+    func search(query: String, mode: TransportMode?) async throws -> SearchResponse
+}
+
+/// Where RouteFocusModel gets vehicles and arrivals.
+protocol FocusSource: Sendable {
+    func fetchVehicles(mode: TransportMode) async throws -> [Vehicle]
+    func fetchArrivals(stopId: String, route: RouteRef, direction: Int) async throws -> [StopArrival]
+    func fetchLuasArrivals(stopId: String, direction: Int, routeName: String) async throws -> [StopArrival]
+}
+
+extension TurasServerService: NearbySource, SearchSource, FocusSource {}
 
 // MARK: - Server JSON Models
 

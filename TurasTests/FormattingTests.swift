@@ -40,10 +40,6 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AccessibilityText.route(name: "39A"), "Route 39A")
         XCTAssertEqual(AccessibilityText.route(name: "220", operatorName: "Bus Éireann"), "Route 220, Bus Éireann")
         XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square"), "Stop, Parnell Square")
-        XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square", isNearest: true, walkingMinutes: 4),
-                       "Nearest stop, Parnell Square, 4 minutes walk")
-        XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square", isNearest: true, walkingMinutes: 1),
-                       "Nearest stop, Parnell Square, 1 minute walk")
     }
 
     func testArrivalLabel() {
@@ -56,5 +52,94 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 20, delay: 180), now: now), "To Ongar, due now, live, 3 minutes late")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, cancelled: true), now: now), "To Ongar, cancelled")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, headsign: nil), now: now), "in 10 minutes, live")
+    }
+
+    // MARK: - Departures
+
+    func testFirstTimeText() {
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(30), now: now), "Due")
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(-60), now: now), "Due")
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(90), now: now), "1 min")
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(14 * 60 + 20), now: now), "14 min")
+    }
+
+    func testLaterTimeText() {
+        XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(20), now: now), "Due")
+        XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(14 * 60), now: now), "14")
+        XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(27 * 60 + 59), now: now), "27")
+    }
+
+    func testDistanceAndWalkText() {
+        XCTAssertEqual(DepartureFormatting.distanceText(metres: 90), "90 m")
+        XCTAssertEqual(DepartureFormatting.distanceText(metres: 999), "999 m")
+        XCTAssertEqual(DepartureFormatting.distanceText(metres: 1000), "1.0 km")
+        XCTAssertEqual(DepartureFormatting.distanceText(metres: 1250), "1.3 km")
+        XCTAssertEqual(DepartureFormatting.walkText(minutes: 1), "1 min walk")
+        XCTAssertEqual(DepartureFormatting.walkText(minutes: 4), "4 min walk")
+    }
+
+    func testDepartureLabel() {
+        func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
+            DepartureTime(tripId: "t\(minutes)", at: now.addingTimeInterval(TimeInterval(minutes * 60)), delay: 0, source: source, cancelled: cancelled)
+        }
+        func row(_ times: [DepartureTime], distance: Int = 90) -> NearbyDeparture {
+            NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: "Ongar", stopId: "S", distanceM: distance, times: times)
+        }
+
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2), time(14), time(27)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, 2 minutes, then 14 and 27 minutes."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(0, source: .timetable), time(1)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Scheduled, due now, then 1 minute."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(5, source: .realtime)], distance: 1250), stopName: "Heuston", now: now),
+            "39A to Ongar from Heuston, 1.3 kilometres. Estimated, 5 minutes."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(3, cancelled: true), time(10, cancelled: true), time(20)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Cancelled, 3 minutes, then 10 cancelled and 20 minutes."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(0), time(1, cancelled: true)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, due now, then 1 cancelled minute."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2), time(0)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, 2 minutes, then due now."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. No times."
+        )
+        let noHeadsign = NearbyDeparture(route: "Green", agencyId: "10000", direction: 1, headsign: nil, stopId: "L", distanceM: 40, times: [time(3)])
+        XCTAssertEqual(
+            AccessibilityText.departure(noHeadsign, stopName: "Abbey Street", now: now),
+            "Green to Direction 1 from Abbey Street, 40 metres. Live, 3 minutes."
+        )
+    }
+
+    // MARK: - Server errors
+
+    func testServerErrorMessages() {
+        let cases: [(Int, String)] = [
+            (401, "API key issue. Check configuration."),
+            (403, "API key issue. Check configuration."),
+            (429, "Too many requests. Retrying..."),
+            (503, "Server is starting up. Retrying..."),
+            (500, "Service temporarily unavailable. Retrying..."),
+            (404, "Network error (404). Check your connection."),
+        ]
+        for (code, message) in cases {
+            XCTAssertEqual(ServerErrorText.message(for: TurasServerError.httpError(statusCode: code)), message, "HTTP \(code)")
+        }
+        XCTAssertEqual(ServerErrorText.message(for: TurasServerError.invalidURL), "Server error. Retrying...")
+        XCTAssertEqual(ServerErrorText.message(for: URLError(.notConnectedToInternet)), "No internet connection. Check your network.")
+        XCTAssertEqual(ServerErrorText.message(for: NSError(domain: "other", code: 1)), "Something went wrong. Retrying...")
+        XCTAssertTrue(ServerErrorText.isCancellation(CancellationError()))
+        XCTAssertTrue(ServerErrorText.isCancellation(URLError(.cancelled)))
+        XCTAssertFalse(ServerErrorText.isCancellation(URLError(.timedOut)))
     }
 }

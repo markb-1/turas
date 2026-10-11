@@ -5,6 +5,16 @@ enum GeoUtils {
     /// Multiplier to approximate road distance from straight-line distance.
     static let roadFactor: Double = 1.3
 
+    /// Walking speed: ~5 km/h.
+    static let walkingSpeedMps: Double = 1.33
+
+    /// Minutes to walk a straight-line distance, via the road factor. Never
+    /// less than one.
+    static func walkingMinutes(metres: Double) -> Int {
+        let seconds = metres * roadFactor / walkingSpeedMps
+        return max(1, Int(seconds / 60))
+    }
+
     /// Equirectangular distance approximation in metres (accurate for short distances like Dublin).
     static func straightLineDistance(
         lat1: Double, lon1: Double,

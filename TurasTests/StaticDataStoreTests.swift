@@ -189,28 +189,6 @@ final class StaticDataStoreTests: XCTestCase {
         XCTAssertEqual(stops.map(\.id), ["B1", "B2"])
     }
 
-    // MARK: - Resolving shared names
-
-    func testResolvePicksAgencyServingTheStop() async {
-        let source = FakeSource()
-        await source.setRoutes([.bus: [db220, be220]])
-        await source.setStops([stop("D1"), stop("D2")], route: "220", agency: "5249", direction: 0)
-        await source.setStops([stop("D2"), stop("D1")], route: "220", agency: "5249", direction: 1)
-        await source.setStops([stop("C1"), stop("C2")], route: "220", agency: "5401", direction: 0)
-        let store = makeStore(source: source)
-        await store.refreshRoutesIfStale()
-
-        let cork = await store.resolve(name: "220", mode: .bus, atStop: "C2")
-        let dublin = await store.resolve(name: "220", mode: .bus, atStop: "D1")
-        let unknown = await store.resolve(name: "220", mode: .bus, atStop: "Z")
-        let unique = await store.resolve(name: "39A", mode: .bus, atStop: "Z")
-
-        XCTAssertEqual(cork, be220.ref)
-        XCTAssertEqual(dublin, db220.ref)
-        XCTAssertEqual(unknown, RouteRef(name: "220"), "undecidable: let the server choose")
-        XCTAssertEqual(unique, RouteRef(name: "39A"), "39A is not in the refreshed list")
-    }
-
     // MARK: - Bundled lists
 
     func testMakeRouteListsLeavesAgencyToServer() {

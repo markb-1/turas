@@ -95,4 +95,43 @@ final class TurasServerServiceTests: XCTestCase {
         ))
         XCTAssertEqual(url.absoluteString, "https://turas.test/api/v1/stops?route=A%2BB%20%26C%3DD")
     }
+
+    func testFetchNearbyQueryAndDecoding() async throws {
+        StubURLProtocol.stub.set(body: Data("""
+        {"stops": [{"id": "S1", "name": "College Green", "lat": 53.3441, "lon": -6.2595, "distance_m": 90}],
+         "departures": []}
+        """.utf8))
+
+        let response = try await makeService().fetchNearby(lat: 53.3441, lon: -6.2595, mode: .luas)
+
+        XCTAssertEqual(response.stops.map(\.id), ["S1"])
+        let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
+        XCTAssertEqual(url.path, "/api/v1/nearby")
+        XCTAssertEqual(url.query, "lat=53.344100&lon=-6.259500&mode=luas")
+    }
+
+    func testSearchQueryWithAndWithoutMode() async throws {
+        StubURLProtocol.stub.set(body: Data(#"{"stops": [], "routes": [{"name": "39A", "agency_id": "1", "mode": "bus"}]}"#.utf8))
+        let service = makeService()
+
+        let withMode = try await service.search(query: "dún laoghaire", mode: .train)
+        XCTAssertEqual(withMode.routes.map(\.name), ["39A"])
+        var url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.last?.url)
+        XCTAssertEqual(url.path, "/api/v1/search")
+        XCTAssertEqual(url.query, "q=d%C3%BAn%20laoghaire&mode=train")
+
+        _ = try await service.search(query: "39", mode: nil)
+        url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.last?.url)
+        XCTAssertEqual(url.query, "q=39", "no mode parameter when none is given")
+    }
+
+    func testSourceProtocolsAreSatisfiedByTheService() {
+        let service = makeService()
+        let nearby: NearbySource = service
+        let search: SearchSource = service
+        let focus: FocusSource = service
+        XCTAssertTrue(nearby is TurasServerService)
+        XCTAssertTrue(search is TurasServerService)
+        XCTAssertTrue(focus is TurasServerService)
+    }
 }
