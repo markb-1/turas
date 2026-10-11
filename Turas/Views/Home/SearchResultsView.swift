@@ -13,13 +13,19 @@ struct SearchResultsView: View {
     /// "Bus · 1.2 km": modes, then distance from the map centre, so
     /// same-name stops a few tens of metres apart can be told apart.
     nonisolated static func stopSubtitle(_ stop: StopSearchResult, from centre: CLLocationCoordinate2D) -> String {
-        let metres = GeoUtils.straightLineDistance(lat1: centre.latitude, lon1: centre.longitude, lat2: stop.lat, lon2: stop.lon)
-        let parts = stop.modes.map(\.label) + [DepartureFormatting.distanceText(metres: Int(metres.rounded()))]
+        let parts = stop.modes.map(\.label) + [DepartureFormatting.distanceText(metres: metres(to: stop, from: centre))]
         return parts.joined(separator: " · ")
     }
 
+    /// "Stop, College Green, Bus, 1.2 kilometres" for VoiceOver.
     nonisolated static func stopLabel(_ stop: StopSearchResult, from centre: CLLocationCoordinate2D) -> String {
-        "\(AccessibilityText.stop(name: stop.name)), \(stopSubtitle(stop, from: centre))"
+        let parts = [AccessibilityText.stop(name: stop.name)] + stop.modes.map(\.label)
+            + [AccessibilityText.distance(metres: metres(to: stop, from: centre))]
+        return parts.joined(separator: ", ")
+    }
+
+    private nonisolated static func metres(to stop: StopSearchResult, from centre: CLLocationCoordinate2D) -> Int {
+        Int(GeoUtils.straightLineDistance(lat1: centre.latitude, lon1: centre.longitude, lat2: stop.lat, lon2: stop.lon).rounded())
     }
 
     private var query: String { search.query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -51,9 +57,12 @@ struct SearchResultsView: View {
                             HStack(spacing: 10) {
                                 RouteBadge(route: route.name, mode: route.mode)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text([route.headsign(for: 0), route.headsign(for: 1)].compactMap { $0 }.joined(separator: " ⇄ "))
-                                        .font(.body)
-                                        .foregroundStyle(Theme.ink)
+                                    let headsigns = [route.headsign(for: 0), route.headsign(for: 1)].compactMap { $0 }.joined(separator: " ⇄ ")
+                                    if !headsigns.isEmpty {
+                                        Text(headsigns)
+                                            .font(.body)
+                                            .foregroundStyle(Theme.ink)
+                                    }
                                     Text(route.operatorLabel)
                                         .font(.caption)
                                         .foregroundStyle(Theme.muted)

@@ -70,7 +70,7 @@ enum UITestStubServer {
                {"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 90,
                 "times": [\(time(2)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
                {"route": "16", "agency_id": "1", "direction": 1, "headsign": "Ballinteer", "stop_id": "8220DB000401", "distance_m": 420,
-                "times": [\(time(5, source: "realtime", cancelled: true)), \(time(19))]},
+                "times": [\(time(5, source: "realtime", cancelled: true)), \(time(19, cancelled: true))]},
                {"route": "46A", "agency_id": "1", "direction": 0, "stop_id": "8220DB000400", "distance_m": 90,
                 "times": [\(time(8, source: "timetable"))]}
              ]}

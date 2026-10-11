@@ -148,5 +148,8 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(route.mode, .bus)
         XCTAssertEqual(route.headsign(for: 0), "Dún Laoghaire")
         XCTAssertEqual(route.headsign(for: 1), "Phoenix Park")
+        // No agency_name: the operator falls back to the agency ID.
+        XCTAssertNil(response.routes[1].agencyName)
+        XCTAssertEqual(response.routes[1].operatorLabel, "Operator 5401")
     }
 }

@@ -87,6 +87,9 @@ final class RouteFocusModel: ObservableObject {
     private var generation = 0
     /// Between `start()` and `stop()`.
     private var isStarted = false
+    /// `stop()` was called; a later `start()` does nothing (focus can close
+    /// before the task that starts it runs).
+    private var isStopped = false
     /// The scene is in the foreground.
     private var isForeground = true
 
@@ -141,6 +144,7 @@ final class RouteFocusModel: ObservableObject {
     /// Loads the stops and shape, picks the stop and fetches; returns once
     /// the first answer is in, leaving a 30 s refresh running.
     func start() async {
+        guard !isStopped else { return }
         isStarted = true
         await load()
         await refresh()
@@ -148,6 +152,7 @@ final class RouteFocusModel: ObservableObject {
     }
 
     func stop() {
+        isStopped = true
         isStarted = false
         refreshTask?.cancel()
         refreshTask = nil

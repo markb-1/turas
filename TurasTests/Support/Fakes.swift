@@ -135,7 +135,9 @@ actor FakeFocusSource: FocusSource {
     private var arrivals: [StopArrival] = []
     private var luasArrivals: [StopArrival] = []
     private var error: Error?
-    private(set) var vehicleFetches = 0
+    private(set) var vehicleFetches = 0 {
+        didSet { vehicleFetchBox.value = vehicleFetches }
+    }
     private(set) var arrivalFetches = 0 {
         didSet { arrivalFetchBox.value = arrivalFetches }
     }
@@ -143,8 +145,10 @@ actor FakeFocusSource: FocusSource {
         didSet { luasFetchBox.value = luasFetches }
     }
     /// Counts readable without awaiting.
+    nonisolated var vehicleFetchCount: Int { vehicleFetchBox.value }
     nonisolated var arrivalFetchCount: Int { arrivalFetchBox.value }
     nonisolated var luasFetchCount: Int { luasFetchBox.value }
+    private nonisolated let vehicleFetchBox = AtomicInt()
     private nonisolated let arrivalFetchBox = AtomicInt()
     private nonisolated let luasFetchBox = AtomicInt()
     private(set) var lastArrivalRequest: (stopId: String, route: RouteRef, direction: Int)?

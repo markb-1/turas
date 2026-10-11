@@ -41,6 +41,8 @@ final class HomeSmokeTests: XCTestCase {
         if allowWhileUsing.waitForExistence(timeout: 5) {
             allowWhileUsing.tap()
         }
+        // The first screenshot must not catch the card on its way out.
+        XCTAssertTrue(waitForDisappearance(element("home.priming")), "the priming card goes once location is decided")
     }
 
     /// Timeline rows (hidden from accessibility while another panel covers them).
@@ -100,7 +102,9 @@ final class HomeSmokeTests: XCTestCase {
         _ = firstRow()
 
         // Stop search: flies the map; the timeline follows.
-        search("College")
+        // "College Green", not "College": live, the server ranks by name
+        // only and "College" puts College Manor, Dundalk first.
+        search("College Green")
         let stop = firstMatch(prefix: "search.stop.")
         snapshot("search-stop")
         stop.tap()

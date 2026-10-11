@@ -100,14 +100,16 @@ final class AppDependencies {
         let staticData = staticData
         let routeShapeService = routeShapeService
         // Decode the bundled shapes and stops off the main thread now, so the
-        // first route focus does not hitch, and refresh stale route lists as
-        // the old map screen did at launch.
-        Task.detached(priority: .utility) { [routeShapeService, routeStopService, staticData] in
+        // first route focus does not hitch. HomeModel refreshes stale route
+        // lists at launch and whenever the app becomes active.
+        Task.detached(priority: .utility) { [routeShapeService, routeStopService] in
             await routeShapeService.preload()
             await routeStopService.preload()
+        }
+        let refreshRoutes: HomeModel.RouteRefresh = {
             await staticData.refreshRoutesIfStale()
         }
-        return HomeModel(nearby: nearby, search: search, location: locationService) { target, centre, userLocation in
+        return HomeModel(nearby: nearby, search: search, location: locationService, refreshRoutes: refreshRoutes) { target, centre, userLocation in
             RouteFocusModel(
                 target: target, centre: centre, userLocation: userLocation,
                 source: serverService, staticData: staticData, shapes: routeShapeService

@@ -46,13 +46,13 @@ final class HomeModelTests: XCTestCase {
     private let location = FakeLocation()
     private let collegeGreen = CLLocationCoordinate2D(latitude: 53.3441, longitude: -6.2595)
 
-    private func makeModel() -> HomeModel {
+    private func makeModel(refreshRoutes: HomeModel.RouteRefresh? = nil) -> HomeModel {
         let nearby = NearbyModel(source: nearbySource, clock: clock.appClock)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaces(), clock: clock.appClock)
         let store = StaticDataStore(source: EmptyStaticSource(), bundledStops: RouteStopService(stopsByRoute: [:]), cacheDirectory: nil, bundledRoutes: { [:] })
         let clock = clock
         let focusSource = focusSource
-        return HomeModel(nearby: nearby, search: search, location: location) { target, centre, userLocation in
+        return HomeModel(nearby: nearby, search: search, location: location, refreshRoutes: refreshRoutes) { target, centre, userLocation in
             RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: focusSource,
                             staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
         }
@@ -171,6 +171,7 @@ final class HomeModelTests: XCTestCase {
         await waitUntil { model.locationState == .off }
         XCTAssertEqual(model.cameraPosition, before)
         XCTAssertFalse(model.showsPrimingCard)
+        XCTAssertTrue(model.canLocate, "near me stays enabled: a tap asks again")
         XCTAssertEqual(location.requests, 2, "never re-prompts by itself")
     }
 
@@ -220,6 +221,31 @@ final class HomeModelTests: XCTestCase {
         await waitUntil { self.clock.sleeperCount == 0 }
         model.scenePhaseChanged(to: .active)
         await waitUntil { self.nearbySource.callCount == 2 }
+    }
+
+    func testRouteListsRefreshAtLaunchAndOnReturnWithoutOverlapping() async {
+        let refreshes = AtomicInt()
+        let clock = clock
+        // Each refresh takes 1 s of test-clock time, so a test can act mid-refresh.
+        let model = makeModel(refreshRoutes: {
+            refreshes.value += 1
+            await FakeNearbySource.wait(.seconds(1), on: clock)
+        })
+        model.onAppear()
+        await waitUntil("launch refresh running") { refreshes.value == 1 && clock.sleeperCount == 1 }
+
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        XCTAssertEqual(refreshes.value, 1, "no second refresh while the launch one runs")
+
+        clock.advance(by: 1)
+        await waitUntil("launch refresh done") { clock.sleeperCount == 0 }
+        await waitUntil("refresh slot free") { !model.isRefreshingRoutes }
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        await waitUntil("refreshed on return") { refreshes.value == 2 }
+        clock.advance(by: 1)
+        await waitUntil { !model.isRefreshingRoutes }
     }
 
     // MARK: - Search
@@ -287,6 +313,47 @@ final class HomeModelTests: XCTestCase {
     }
 
     // MARK: - Route focus
+
+    func testRouteResultDuringFocusReplacesItAndBackRestoresTheTimeline() async throws {
+        let model = makeModel()
+        await loadTimeline(model)
+        model.openFocus(departure: model.nearby.departures[0])
+        let first = try XCTUnwrap(model.focus)
+        // Counted by vehicle fetches: the route result's focus has no stop
+        // (the store has no stop lists), so it asks for no arrivals.
+        await waitUntil("first focus polling") { self.focusSource.vehicleFetchCount == 1 }
+        await waitUntil("only focus sleeps") { self.clock.sleeperCount == 1 }
+        XCTAssertEqual(nearbySource.callCount, 1)
+
+        let route = RouteSearchResult(name: "46A", agencyId: "1", agencyName: "Dublin Bus", mode: .bus, headsignOutbound: "Dún Laoghaire", headsignInbound: "Phoenix Park")
+        model.selectRouteResult(route)
+        let second = try XCTUnwrap(model.focus)
+        XCTAssertFalse(first === second)
+        XCTAssertEqual(second.route, route.ref)
+        await waitUntil("second focus polling") { self.focusSource.vehicleFetchCount == 2 }
+        await waitUntil("one focus loop") { self.clock.sleeperCount == 1 }
+
+        // A first focus still polling would fetch again on the next tick.
+        clock.advance(by: 30)
+        await waitUntil("second focus refreshed") { self.focusSource.vehicleFetchCount >= 3 }
+        for _ in 0..<50 {
+            await Task.yield()
+            _ = await focusSource.vehicleFetches
+        }
+        XCTAssertEqual(focusSource.vehicleFetchCount, 3, "the replaced focus stopped polling")
+        XCTAssertEqual(nearbySource.callCount, 1, "the timeline stays paused across the replacement")
+
+        model.closeFocus()
+        XCTAssertEqual(model.screen, .timeline)
+        assertCentre(model.cameraPosition, is: collegeGreen, "the timeline's camera, saved by the first focus")
+        await waitUntil("nearby resumed") { self.nearbySource.callCount == 2 }
+        await waitUntil("nearby polling") { self.clock.sleeperCount == 1 }
+        for _ in 0..<50 {
+            await Task.yield()
+            _ = await nearbySource.calls
+        }
+        XCTAssertEqual(nearbySource.callCount, 2, "resumed once")
+    }
 
     func testRowOpensFocusWithItsStopAndBackRestoresTheTimeline() async throws {
         let model = makeModel()

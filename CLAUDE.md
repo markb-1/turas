@@ -23,8 +23,14 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
   an exception for `TURAS_SERVER_HOST` to the built plist (Xcode does not expand build
   settings in plist keys, so `$(TURAS_SERVER_HOST)` as a source key never matches).
   Release builds warn while the server is plain HTTP.
-- UI-test stub runs keep routes and stops in memory only. Older Debug builds wrote the
-  stub's answers to `Caches/StaticData` for 7 days, so a simulator that ran them needs
+- UI tests (`-only-testing:TurasUITests`) launch the app with `TURAS_UITEST_STUB=1`, so
+  Debug builds answer from `UITestStubServer` and a canned place search (no server or
+  network). `TEST_RUNNER_TURAS_UITEST_LIVE=1 xcodebuild test ...` runs them against the
+  real server and MapKit. Set the simulator's location first
+  (`xcrun simctl location <id> set 53.3441,-6.2595`); to see the priming card again,
+  `xcrun simctl privacy <id> reset location com.turas.Turas`.
+- Stub runs keep routes and stops in memory only. Older Debug builds wrote the stub's
+  answers to `Caches/StaticData` for 7 days, so a simulator that ran them needs
   `xcrun simctl uninstall <id> com.turas.Turas` once before a live run.
 - Some agent environments have no Swift toolchain. If you cannot compile, say so, keep
   changes small and reviewable, and rely on CI.
@@ -109,7 +115,8 @@ are not in the repo):
   Routes 447 and 448 have stops but no shapes.
 
 Routes and stops come from the server when possible (`StaticDataStore`, JSON cache in
-`Caches/StaticData`, 7-day TTL, refreshed in the background at launch). The bundled
+`Caches/StaticData`, 7-day TTL, refreshed in the background at launch and on return to
+the foreground). The bundled
 routes and stops are the fallback when the cache is empty and the network fails.
 
 ## Server contract

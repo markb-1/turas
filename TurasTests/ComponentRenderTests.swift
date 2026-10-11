@@ -79,6 +79,14 @@ final class ComponentRenderTests: XCTestCase {
         let none = StopSearchResult(id: "c", name: "X", lat: 53.3409, lon: -6.2600, modes: [])
         XCTAssertEqual(SearchResultsView.stopSubtitle(none, from: centre), "100 m")
     }
+
+    func testStopLabelSpeaksSeparatorsAndUnits() {
+        let centre = CLLocationCoordinate2D(latitude: 53.3400, longitude: -6.2600)
+        let near = StopSearchResult(id: "a", name: "Dun Laoghaire SC", lat: 53.3409, lon: -6.2600, modes: [.bus])
+        XCTAssertEqual(SearchResultsView.stopLabel(near, from: centre), "Stop, Dun Laoghaire SC, Bus, 100 metres")
+        let far = StopSearchResult(id: "b", name: "Dun Laoghaire SC", lat: 53.3500, lon: -6.2600, modes: [.bus, .luas])
+        XCTAssertEqual(SearchResultsView.stopLabel(far, from: centre), "Stop, Dun Laoghaire SC, Bus, Luas, 1.1 kilometres")
+    }
 }
 
 private actor NoPlaceSearch: PlaceSearching {

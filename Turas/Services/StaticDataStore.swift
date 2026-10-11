@@ -7,8 +7,8 @@ import os
 ///
 /// - Routes: memory, then the disk cache (any age), then the bundled
 ///   route_lookup.json / headsign_lookup.json. `refreshRoutesIfStale()`
-///   (run in the background at launch) re-fetches route lists whose cache
-///   is missing or older than 7 days.
+///   (run in the background at launch and when the app becomes active)
+///   re-fetches route lists whose cache is missing or older than 7 days.
 /// - Stops: memory, then a fresh disk cache, then the server, then a stale
 ///   disk cache, then the bundled route_stops.json.
 ///

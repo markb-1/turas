@@ -107,6 +107,11 @@ enum AccessibilityText {
         return "Route \(name), \(operatorName)"
     }
 
+    /// "90 metres" or "1.3 kilometres".
+    static func distance(metres: Int) -> String {
+        metres < 1000 ? "\(metres) metres" : "\(DepartureFormatting.kilometres(metres)) kilometres"
+    }
+
     /// "Stop, Parnell Square West".
     static func stop(name: String) -> String {
         "Stop, \(name)"
@@ -139,10 +144,7 @@ enum AccessibilityText {
     /// One label per timeline row: "39A to Ongar from College Green, 90
     /// metres. Live, 2 minutes, then 14 and 27 minutes."
     static func departure(_ departure: NearbyDeparture, stopName: String, now: Date = Date()) -> String {
-        let distance = departure.distanceM < 1000
-            ? "\(departure.distanceM) metres"
-            : "\(DepartureFormatting.kilometres(departure.distanceM)) kilometres"
-        let label = "\(departure.route) to \(departure.destination) from \(stopName), \(distance). "
+        let label = "\(departure.route) to \(departure.destination) from \(stopName), \(distance(metres: departure.distanceM)). "
 
         guard let first = departure.times.first else {
             return label + "No times."

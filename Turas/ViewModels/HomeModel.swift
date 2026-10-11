@@ -33,6 +33,8 @@ final class HomeModel: ObservableObject {
     }
 
     typealias FocusFactory = @MainActor (RouteFocusTarget, CLLocationCoordinate2D, CLLocationCoordinate2D?) -> RouteFocusModel
+    /// Re-fetches stale route lists (StaticDataStore.refreshRoutesIfStale).
+    typealias RouteRefresh = @Sendable () async -> Void
 
     /// O'Connell Bridge.
     static let cityCentre = CLLocationCoordinate2D(latitude: 53.3472, longitude: -6.2592)
@@ -54,6 +56,8 @@ final class HomeModel: ObservableObject {
 
     private let location: LocationProviding
     private let makeFocus: FocusFactory
+    private let refreshRoutes: RouteRefresh?
+    private var routeRefreshTask: Task<Void, Never>?
     /// The span the camera last settled at, when the view reports it. Once
     /// the user moves the map, `cameraPosition` no longer holds a region.
     private var settledSpan: MKCoordinateSpan?
@@ -64,11 +68,12 @@ final class HomeModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var focusCancellable: AnyCancellable?
 
-    init(nearby: NearbyModel, search: SearchModel, location: LocationProviding, makeFocus: @escaping FocusFactory) {
+    init(nearby: NearbyModel, search: SearchModel, location: LocationProviding, refreshRoutes: RouteRefresh? = nil, makeFocus: @escaping FocusFactory) {
         self.nearby = nearby
         self.search = search
         self.location = location
         self.makeFocus = makeFocus
+        self.refreshRoutes = refreshRoutes
         // Views observe this model; forward the children's changes.
         nearby.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         search.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
@@ -104,11 +109,15 @@ final class HomeModel: ObservableObject {
 
     var userLocation: CLLocationCoordinate2D? { location.userLocation }
 
+    /// A route-list refresh is running.
+    var isRefreshingRoutes: Bool { routeRefreshTask != nil }
+
     // MARK: - Lifecycle
 
     func onAppear() {
         guard !hasAppeared else { return }
         hasAppeared = true
+        refreshRouteListsIfStale()
         switch location.authorizationStatus {
         case .notDetermined:
             locationState = .undecided
@@ -120,11 +129,24 @@ final class HomeModel: ObservableObject {
     }
 
     func scenePhaseChanged(to phase: ScenePhase) {
+        if phase == .active {
+            refreshRouteListsIfStale()
+        }
         focus?.scenePhaseChanged(to: phase)
         if case .focus = screen {
             return // The timeline stays paused while focus is open.
         }
         nearby.scenePhaseChanged(to: phase)
+    }
+
+    /// Route lists older than 7 days are re-fetched at launch and when the
+    /// app comes back, one refresh at a time.
+    private func refreshRouteListsIfStale() {
+        guard let refreshRoutes, routeRefreshTask == nil else { return }
+        routeRefreshTask = Task { [weak self] in
+            await refreshRoutes()
+            self?.routeRefreshTask = nil
+        }
     }
 
     /// The map camera stopped moving. In route focus the camera follows the

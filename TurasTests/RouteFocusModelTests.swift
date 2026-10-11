@@ -330,6 +330,16 @@ final class RouteFocusModelTests: XCTestCase {
         XCTAssertEqual(clock.sleeperCount, 0)
     }
 
+    func testStartAfterStopDoesNothing() async {
+        // Focus closed or replaced before its start task ran.
+        let source = FakeFocusSource()
+        let model = makeModel(target: target(stop: nil), source: source, staticSource: await staticSource(), shapes: [:])
+        model.stop()
+        await model.start()
+        XCTAssertEqual(source.arrivalFetchCount, 0, "a stopped focus never fetches")
+        XCTAssertEqual(clock.sleeperCount, 0, "and never polls")
+    }
+
     // MARK: - Pure helpers
 
     func testPickStop() {
