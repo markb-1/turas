@@ -177,9 +177,6 @@ final class MapViewModel: ObservableObject {
     private static let pollingInterval: Duration = .seconds(30)
     private static let userZoomSpan = MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
 
-    /// Walking speed: ~5 km/h = 1.33 m/s
-    private static let walkingSpeedMps: Double = 1.33
-
     /// Radius for nearby stops in idle state (metres)
     private static let nearbyRadius: Double = 500
 
@@ -572,10 +569,7 @@ final class MapViewModel: ObservableObject {
 
         closestStop = nearest
 
-        // Walking estimate: straight-line x road factor, at walking speed
-        let walkingDistance = minDistance * GeoUtils.roadFactor
-        let walkingSeconds = walkingDistance / Self.walkingSpeedMps
-        walkingMinutes = max(1, Int(walkingSeconds / 60))
+        walkingMinutes = GeoUtils.walkingMinutes(metres: minDistance)
     }
 
     // MARK: - Polling
@@ -626,37 +620,12 @@ final class MapViewModel: ObservableObject {
     }
 
     nonisolated static func isCancellation(_ error: Error) -> Bool {
-        if error is CancellationError {
-            return true
-        }
-        return (error as? URLError)?.code == .cancelled
+        ServerErrorText.isCancellation(error)
     }
 
     /// Maps technical errors to user-friendly messages.
     nonisolated static func userFriendlyError(_ error: Error) -> String {
-        if let serverError = error as? TurasServerError {
-            switch serverError {
-            case .httpError(let code):
-                switch code {
-                case 401, 403:
-                    return "API key issue. Check configuration."
-                case 429:
-                    return "Too many requests. Retrying..."
-                case 503:
-                    return "Server is starting up. Retrying..."
-                case 500...:
-                    return "Service temporarily unavailable. Retrying..."
-                default:
-                    return "Network error (\(code)). Check your connection."
-                }
-            case .invalidURL, .invalidResponse:
-                return "Server error. Retrying..."
-            }
-        }
-        if (error as NSError).domain == NSURLErrorDomain {
-            return "No internet connection. Check your network."
-        }
-        return "Something went wrong. Retrying..."
+        ServerErrorText.message(for: error)
     }
 }
 
