@@ -135,19 +135,34 @@ struct HomeView: View {
         model.search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Search results show once there is something to search for; with
+    /// the box open but empty the timeline stays in view.
+    private var showsSearchResults: Bool {
+        model.screen == .search && !isQueryEmpty
+    }
+
+    /// Whether search results or route focus cover the timeline.
+    private var coversTimeline: Bool {
+        showsSearchResults || isInFocus
+    }
+
+    /// The timeline is always mounted, so its scroll position survives
+    /// search and route focus: those panels cover it, and while covered it
+    /// is invisible, untappable and hidden from VoiceOver (and UI tests).
+    ///
     /// No identifier on this container: it would replace the identifiers
     /// of the tabs and buttons inside it.
-    @ViewBuilder
     private var panel: some View {
-        VStack(spacing: Theme.cardSpacing) {
-            switch model.screen {
-            case .timeline:
+        ZStack(alignment: .top) {
+            VStack(spacing: Theme.cardSpacing) {
                 timelinePanel
-            case .search where isQueryEmpty:
-                // The box is open but empty: the timeline stays in view
-                // until there is something to search for.
-                timelinePanel
-            case .search:
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .opacity(coversTimeline ? 0 : 1)
+            .allowsHitTesting(!coversTimeline)
+            .accessibilityHidden(coversTimeline)
+
+            if showsSearchResults {
                 SearchResultsView(
                     search: model.search,
                     mapCentre: model.centre,
@@ -155,18 +170,20 @@ struct HomeView: View {
                     onSelectRoute: model.selectRouteResult,
                     onSelectPlace: model.selectPlaceResult
                 )
-            case .focus:
-                if let focus = model.focus {
-                    RouteFocusView(focus: focus, onBack: model.closeFocus)
-                        .gesture(
-                            DragGesture(minimumDistance: 40)
-                                .onEnded { value in
-                                    if value.translation.height > 80 {
-                                        model.closeFocus()
-                                    }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Theme.surface)
+            } else if isInFocus, let focus = model.focus {
+                RouteFocusView(focus: focus, onBack: model.closeFocus)
+                    .gesture(
+                        DragGesture(minimumDistance: 40)
+                            .onEnded { value in
+                                if value.translation.height > 80 {
+                                    model.closeFocus()
                                 }
-                        )
-                }
+                            }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Theme.surface)
             }
         }
         .padding(.top, 8)

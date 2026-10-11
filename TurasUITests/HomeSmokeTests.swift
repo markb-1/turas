@@ -43,8 +43,12 @@ final class HomeSmokeTests: XCTestCase {
         }
     }
 
+    /// Timeline rows (hidden from accessibility while another panel covers them).
+    private var rows: XCUIElementQuery {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'timeline.row.'"))
+    }
+
     private func firstRow(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
-        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'timeline.row.'"))
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: timeout), "a timeline row appears", file: file, line: line)
         return rows.firstMatch
     }
@@ -104,6 +108,7 @@ final class HomeSmokeTests: XCTestCase {
         route.tap()
         XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
         XCTAssertTrue(firstMatch(prefix: "focus.arrival.").exists)
+        XCTAssertFalse(rows.firstMatch.exists, "the covered timeline is hidden from accessibility")
         snapshot("focus")
         app.buttons["focus.flip"].tap()
         XCTAssertTrue(firstMatch(prefix: "focus.arrival.").exists)
