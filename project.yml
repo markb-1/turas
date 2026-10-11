@@ -39,6 +39,7 @@ targets:
     scheme:
       testTargets:
         - TurasTests
+        - TurasUITests
       gatherCoverageData: true
 
   TurasTests:
@@ -53,3 +54,16 @@ targets:
       base:
         SWIFT_VERSION: "5.9"
         GENERATE_INFOPLIST_FILE: YES
+
+  TurasUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: TurasUITests
+    dependencies:
+      - target: Turas
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Turas

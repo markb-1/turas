@@ -52,15 +52,23 @@ final class AppDependencies {
     let placeSearch: PlaceSearching
 
     init(config: ServerConfig) {
-        let serverService = TurasServerService(config: config)
+        var session: URLSession?
+        var placeSearch: PlaceSearching = MapKitPlaceSearch()
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["TURAS_UITEST_STUB"] == "1" {
+            session = UITestStubServer.session()
+            placeSearch = UITestStubPlaceSearch()
+        }
+        #endif
+        let serverService = TurasServerService(config: config, session: session)
         let routeStopService = RouteStopService()
         self.serverService = serverService
+        self.placeSearch = placeSearch
         self.locationService = LocationService()
         self.routeShapeService = RouteShapeService()
         self.routeStopService = routeStopService
         self.staticData = StaticDataStore(source: serverService, bundledStops: routeStopService)
         self.favourites = FavouritesStore()
-        self.placeSearch = MapKitPlaceSearch()
     }
 
     /// The home screen's models, wired to the live services.
