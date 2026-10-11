@@ -4,10 +4,21 @@ import SwiftUI
 import XCTest
 @testable import Turas
 
-/// Stops per route and direction, served to StaticDataStore.
+/// Stops per route and direction, served to StaticDataStore. A hold makes
+/// the next stops fetch for a route and direction sleep on the test clock,
+/// so a test can act while a load is in flight.
 private actor FakeStaticSource: StaticDataSource {
+    private let clock: ManualClock?
     private var stops: [String: [RouteStop]] = [:]
     private var routes: [TransportMode: [TransitRoute]] = [:]
+    private var holds: [String: Duration] = [:]
+    /// Fetches that have reached a hold, readable without awaiting.
+    nonisolated var heldCount: Int { heldBox.value }
+    private nonisolated let heldBox = AtomicInt()
+
+    init(clock: ManualClock? = nil) {
+        self.clock = clock
+    }
 
     func setStops(_ stops: [RouteStop], route: String, direction: Int) {
         self.stops["\(route)|\(direction)"] = stops
@@ -15,10 +26,20 @@ private actor FakeStaticSource: StaticDataSource {
 
     func setRoutes(_ routes: [TransportMode: [TransitRoute]]) { self.routes = routes }
 
+    /// Holds the next stops fetch for `route` and `direction` for `delay` of test-clock time.
+    func setHold(_ delay: Duration, route: String, direction: Int) {
+        holds["\(route)|\(direction)"] = delay
+    }
+
     func fetchRoutes(mode: TransportMode) async throws -> [TransitRoute] { routes[mode] ?? [] }
 
     func fetchStops(route: String, agency: String?, direction: Int) async throws -> [RouteStop] {
-        stops["\(route)|\(direction)"] ?? []
+        let key = "\(route)|\(direction)"
+        if let delay = holds.removeValue(forKey: key), let clock {
+            heldBox.value += 1
+            await FakeNearbySource.wait(delay, on: clock)
+        }
+        return stops[key] ?? []
     }
 }
 
@@ -77,7 +98,7 @@ final class RouteFocusModelTests: XCTestCase {
     }
 
     private func staticSource() async -> FakeStaticSource {
-        let source = FakeStaticSource()
+        let source = FakeStaticSource(clock: clock)
         await source.setStops(outbound, route: "39A", direction: 0)
         await source.setStops(inbound, route: "39A", direction: 1)
         return source
@@ -241,6 +262,72 @@ final class RouteFocusModelTests: XCTestCase {
         XCTAssertEqual(luasFetches, 1)
         let arrivalFetches = await source.arrivalFetches
         XCTAssertEqual(arrivalFetches, 0)
+    }
+
+    func testFlipBackRestoresTheTargetHeadsign() async {
+        let model = makeModel(target: target(stop: FocusStop(outbound[1]), headsign: "Ongar (row)"),
+                              staticSource: await staticSource(), shapes: ["39A": [shape0, shape1]])
+        await model.start()
+        XCTAssertEqual(model.headsign, "Ongar (row)")
+        await model.flipDirection()
+        XCTAssertEqual(model.headsign, "UCD", "from the bundled lookup")
+        await model.flipDirection()
+        XCTAssertEqual(model.direction, 0)
+        XCTAssertEqual(model.headsign, "Ongar (row)", "the row's headsign, not the lookup's")
+        model.stop()
+    }
+
+    func testRefreshDuringFlipLoadDoesNotFetchWithTheOldStop() async {
+        let source = FakeFocusSource()
+        let staticSource = await staticSource()
+        let model = makeModel(target: target(stop: FocusStop(outbound[1])), source: source,
+                              staticSource: staticSource, shapes: ["39A": [shape0, shape1]])
+        await model.start()
+        await waitUntil { self.clock.sleeperCount == 1 }
+        XCTAssertEqual(source.arrivalFetchCount, 1)
+
+        await staticSource.setHold(.seconds(5), route: "39A", direction: 1)
+        let flip = Task { await model.flipDirection() }
+        await waitUntil("the inbound stops fetch is held") { staticSource.heldCount == 1 }
+        // Only the held fetch sleeps: the flip cancelled the 30 s loop first.
+        await waitUntil("the loop's sleeper is gone") { self.clock.sleeperCount == 1 }
+        XCTAssertTrue(model.isLoading)
+        XCTAssertEqual(model.direction, 1)
+        XCTAssertEqual(model.highlightedStop?.id, "B", "still the outbound stop mid-load")
+
+        // A tick or an immediate resume landing mid-load must not ask for
+        // the outbound stop's arrivals in the inbound direction.
+        await model.refresh()
+        XCTAssertEqual(source.arrivalFetchCount, 1)
+
+        clock.advance(by: 5)
+        await flip.value
+        XCTAssertEqual(source.arrivalFetchCount, 2)
+        let request = await source.lastArrivalRequest
+        XCTAssertEqual(request?.stopId, "B2")
+        XCTAssertEqual(request?.direction, 1)
+        model.stop()
+    }
+
+    func testForegroundAfterStopDoesNotRestartRefreshing() async {
+        let source = FakeFocusSource()
+        let model = makeModel(target: target(stop: nil), source: source, staticSource: await staticSource(), shapes: [:])
+        await model.start()
+        await waitUntil { self.clock.sleeperCount == 1 }
+        XCTAssertEqual(source.arrivalFetchCount, 1)
+
+        model.stop()
+        await waitUntil { self.clock.sleeperCount == 0 }
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        // Absence check: let a wrongly restarted loop run its immediate
+        // refresh (main-actor turns and actor hops; no clock time passes).
+        for _ in 0..<50 {
+            await Task.yield()
+            _ = await source.vehicleFetches
+        }
+        XCTAssertEqual(source.arrivalFetchCount, 1, "a closed focus stays closed")
+        XCTAssertEqual(clock.sleeperCount, 0)
     }
 
     // MARK: - Pure helpers
