@@ -139,7 +139,9 @@ final class NearbyModelTests: XCTestCase {
     func testReleasedModelStopsRefreshing() async {
         let source = FakeNearbySource()
         var model: NearbyModel? = makeModel(source: source)
-        weak let released = model
+        // Declared, then assigned: `weak let` needs Swift 6.2, and an unmutated `weak var` warns there.
+        weak var released: NearbyModel?
+        released = model
         await loadFirst(model!, source: source, at: collegeGreen)
 
         model = nil
@@ -302,6 +304,7 @@ final class NearbyModelTests: XCTestCase {
         await waitUntil("bus answer held, luas refresh sleeping") { self.clock.sleeperCount == 2 }
 
         // The held bus request now fails; its error belongs to a superseded request.
+        // FakeNearbySource reads `error` after its delay, so the held call throws it.
         await fake.setError(TurasServerError.httpError(statusCode: 500))
         clock.advance(by: 1)
         await waitUntil("stale bus error arrived") { source.answers == 2 }
