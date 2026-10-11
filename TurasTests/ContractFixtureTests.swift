@@ -87,4 +87,66 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(fractional?.timeIntervalSince1970 ?? 0, elevenUTC.timeIntervalSince1970 + 0.25, accuracy: 0.001)
         XCTAssertNil(ServerJSON.parseDate("10 Oct 2026"))
     }
+
+    func testNearby() throws {
+        let response = try ServerJSON.decoder.decode(NearbyResponse.self, from: Fixture.data("nearby"))
+
+        // Structure the app relies on.
+        XCTAssertFalse(response.departures.isEmpty)
+        XCTAssertFalse(response.stops.isEmpty)
+        for departure in response.departures {
+            XCTAssertNotNil(response.stop(withId: departure.stopId), "every row's stop is in stops: \(departure.stopId)")
+            XCTAssertLessThanOrEqual(departure.times.count, 3)
+            XCTAssertEqual(departure.times.map(\.at), departure.times.map(\.at).sorted(), "times ascend")
+            XCTAssertFalse(departure.id.isEmpty)
+            for time in departure.times where time.cancelled {
+                XCTAssertNotEqual(time.source, .live, "a cancelled time is never live")
+            }
+        }
+        XCTAssertTrue(response.departures.contains { $0.headsign == nil }, "the fixture has a row without a headsign")
+        XCTAssertTrue(response.departures.contains { $0.headsign != nil })
+
+        // Values from the server fixture.
+        let first = try XCTUnwrap(response.departures.first)
+        XCTAssertEqual(first.route, "39A")
+        XCTAssertEqual(first.agencyId, "5249")
+        XCTAssertEqual(first.direction, 0)
+        XCTAssertEqual(first.headsign, "Ongar")
+        XCTAssertEqual(first.stopId, "8220DB000400")
+        XCTAssertEqual(first.distanceM, 90)
+        let time = try XCTUnwrap(first.times.first)
+        XCTAssertEqual(time.tripId, "5913_56733")
+        XCTAssertEqual(time.delay, 120)
+        XCTAssertEqual(time.source, .live)
+        XCTAssertFalse(time.cancelled)
+        XCTAssertEqual(ServerJSON.parseDate("2026-10-10T12:02:00+01:00"), time.at, "Europe/Dublin offset")
+        XCTAssertEqual(time.at, ServerJSON.parseDate("2026-10-10T11:02:00Z"))
+        let stop = try XCTUnwrap(response.stop(withId: "8220DB000400"))
+        XCTAssertEqual(stop.name, "College Green")
+        XCTAssertEqual(stop.lat, 53.3441, accuracy: 1e-9)
+        XCTAssertEqual(stop.lon, -6.2595, accuracy: 1e-9)
+        XCTAssertEqual(stop.distanceM, 90)
+    }
+
+    func testSearch() throws {
+        let response = try ServerJSON.decoder.decode(SearchResponse.self, from: Fixture.data("search"))
+
+        XCTAssertFalse(response.stops.isEmpty)
+        XCTAssertFalse(response.routes.isEmpty)
+        for stop in response.stops {
+            XCTAssertFalse(stop.modes.isEmpty, "every stop has at least one known mode")
+        }
+
+        // Values from the server fixture.
+        let stop = try XCTUnwrap(response.stops.first)
+        XCTAssertEqual(stop.name, "Dún Laoghaire (Mallin)")
+        XCTAssertEqual(stop.modes, [.train])
+        let route = try XCTUnwrap(response.routes.first)
+        XCTAssertEqual(route.name, "46A")
+        XCTAssertEqual(route.agencyId, "5249")
+        XCTAssertEqual(route.agencyName, "Dublin Bus")
+        XCTAssertEqual(route.mode, .bus)
+        XCTAssertEqual(route.headsign(for: 0), "Dún Laoghaire")
+        XCTAssertEqual(route.headsign(for: 1), "Phoenix Park")
+    }
 }

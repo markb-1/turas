@@ -1,0 +1,39 @@
+{
+  "stops": [
+    {
+      "id": "8350IR0032",
+      "name": "Dún Laoghaire (Mallin)",
+      "lat": 53.2947,
+      "lon": -6.1336,
+      "modes": [
+        "train"
+      ]
+    },
+    {
+      "id": "8220DB002039",
+      "name": "Dún Laoghaire",
+      "lat": 53.294,
+      "lon": -6.134,
+      "modes": [
+        "bus",
+        "luas"
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "name": "46A",
+      "agency_id": "5249",
+      "agency_name": "Dublin Bus",
+      "mode": "bus",
+      "headsign_outbound": "Dún Laoghaire",
+      "headsign_inbound": "Phoenix Park"
+    },
+    {
+      "name": "7",
+      "agency_id": "5401",
+      "mode": "bus",
+      "headsign_outbound": "Loughlinstown"
+    }
+  ]
+}

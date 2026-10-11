@@ -1,0 +1,67 @@
+{
+  "stops": [
+    {
+      "id": "8220DB000400",
+      "name": "College Green",
+      "lat": 53.3441,
+      "lon": -6.2595,
+      "distance_m": 90
+    },
+    {
+      "id": "8220DB000792",
+      "name": "Dame Street",
+      "lat": 53.3443,
+      "lon": -6.2662,
+      "distance_m": 210
+    }
+  ],
+  "departures": [
+    {
+      "route": "39A",
+      "agency_id": "5249",
+      "direction": 0,
+      "headsign": "Ongar",
+      "stop_id": "8220DB000400",
+      "distance_m": 90,
+      "times": [
+        {
+          "trip_id": "5913_56733",
+          "at": "2026-10-10T11:02:00Z",
+          "delay": 120,
+          "source": "live",
+          "cancelled": false
+        },
+        {
+          "trip_id": "5913_56734",
+          "at": "2026-10-10T11:14:00Z",
+          "delay": 0,
+          "source": "realtime",
+          "cancelled": false
+        },
+        {
+          "trip_id": "5913_56735",
+          "at": "2026-10-10T11:27:00Z",
+          "delay": 0,
+          "source": "timetable",
+          "cancelled": true
+        }
+      ]
+    },
+    {
+      "route": "Green",
+      "agency_id": "5242",
+      "direction": 1,
+      "stop_id": "8220DB000792",
+      "distance_m": 210,
+      "times": [
+        {
+          "trip_id": "luas-1-Broombridge-DUE",
+          "at": "2026-10-10T11:00:00Z",
+          "delay": 0,
+          "source": "live",
+          "cancelled": false
+        }
+      ]
+    }
+  ]
+}
