@@ -9,7 +9,7 @@ struct HomeView: View {
     /// Pin labels show when the camera is close enough to read them.
     @State private var showsPinLabels = false
 
-    private static let labelDistance: Double = 2500
+    private static let labelDistance: Double = 1200
 
     private var isInFocus: Bool {
         if case .focus = model.screen { return true }
