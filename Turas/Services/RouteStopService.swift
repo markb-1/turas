@@ -3,9 +3,10 @@ import os
 
 /// Route stops from the bundled route_stops.json (~2 MB).
 ///
-/// An actor that decodes the file once, off the main thread. Routes that exist under two agencies (e.g. Dublin
-/// 220 and Cork 220) have one entry per agency and direction in the file;
-/// they are merged here because the file is keyed by short name only.
+/// An actor that decodes the file once, off the main thread. Routes that
+/// exist under two agencies (e.g. Dublin 220 and Cork 220) have one entry
+/// per agency and direction in the file; they are merged here because the
+/// file is keyed by short name only.
 actor RouteStopService {
     private static let logger = Logger(subsystem: "com.turas", category: "RouteStopService")
     private var stopsByRoute: [String: [RouteStopDirection]]?
@@ -33,11 +34,6 @@ actor RouteStopService {
         stops(for: routeName)
             .filter { $0.direction == direction }
             .flatMap(\.stops)
-    }
-
-    /// Directions (0/1) that have stops for this route.
-    func directions(for routeName: String) -> Set<Int> {
-        Set(stops(for: routeName).filter { !$0.stops.isEmpty }.map(\.direction))
     }
 
     private func loaded() -> [String: [RouteStopDirection]] {

@@ -112,32 +112,6 @@ actor StaticDataStore {
         return await bundledStops.stops(for: route.name, direction: direction)
     }
 
-    /// The route the user means by `name` at a stop: the only route of that
-    /// name in the mode or, when two agencies share the name, the one whose
-    /// stops include the stop. Falls back to a route without an agency
-    /// (the server's default) when that cannot be decided.
-    func resolve(name: String, mode: TransportMode, atStop stopId: String?) async -> RouteRef {
-        let candidates = routes(for: mode).filter { $0.name == name }
-        if candidates.count == 1 {
-            return candidates[0].ref
-        }
-        guard candidates.count > 1, let stopId else {
-            return RouteRef(name: name)
-        }
-        for candidate in candidates {
-            let directions = candidate.directions.isEmpty ? [0, 1] : candidate.directions
-            for direction in directions {
-                // Only trust server data here: the bundled file merges both
-                // agencies' stops under one name.
-                if let stops = await serverStops(for: candidate.ref, direction: direction),
-                   stops.contains(where: { $0.id == stopId }) {
-                    return candidate.ref
-                }
-            }
-        }
-        return RouteRef(name: name)
-    }
-
     /// Stops from memory, a fresh disk cache or the server; nil when none of
     /// those has them.
     private func serverStops(for route: RouteRef, direction: Int) async -> [RouteStop]? {

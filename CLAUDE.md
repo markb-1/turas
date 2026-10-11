@@ -85,9 +85,9 @@ A route is `RouteRef(name, agencyId)`. The agency ID is whatever the server's `/
 and `/vehicles` report (the GTFS `routes.txt` `agency_id`: `1` Dublin Bus, `2` Bus
 Éireann, `3` Go-Ahead, `10000` LUAS, `IR` Irish Rail, ...); never derive it from a
 route_id. Bundled routes carry no agency. Short names (220, 120, 73, W4, ...) can exist
-under two agencies, so the search chips show the operator name when a
-name is ambiguous, and requests send `agency=` when it is known. A nil agency lets the
-server choose (most trips; for arrivals, an agency serving the stop).
+under two agencies, so route search results always show the operator name, and
+requests send `agency=` when it is known. A nil agency lets the server choose
+(most trips; for arrivals, an agency serving the stop).
 
 ## Bundled data
 

@@ -40,10 +40,6 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AccessibilityText.route(name: "39A"), "Route 39A")
         XCTAssertEqual(AccessibilityText.route(name: "220", operatorName: "Bus Éireann"), "Route 220, Bus Éireann")
         XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square"), "Stop, Parnell Square")
-        XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square", isNearest: true, walkingMinutes: 4),
-                       "Nearest stop, Parnell Square, 4 minutes walk")
-        XCTAssertEqual(AccessibilityText.stop(name: "Parnell Square", isNearest: true, walkingMinutes: 1),
-                       "Nearest stop, Parnell Square, 1 minute walk")
     }
 
     func testArrivalLabel() {

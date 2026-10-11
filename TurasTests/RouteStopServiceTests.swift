@@ -31,12 +31,4 @@ final class RouteStopServiceTests: XCTestCase {
         let stops = await makeService().stops(for: "220", direction: 0)
         XCTAssertEqual(stops.map(\.id), ["D1", "C1"])
     }
-
-    func testDirections() async {
-        let service = makeService()
-        let both = await service.directions(for: "447")
-        let none = await service.directions(for: "missing")
-        XCTAssertEqual(both, [0, 1])
-        XCTAssertEqual(none, [])
-    }
 }

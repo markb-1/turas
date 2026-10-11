@@ -107,12 +107,9 @@ enum AccessibilityText {
         return "Route \(name), \(operatorName)"
     }
 
-    /// "Stop, Parnell Square West" or "Nearest stop, Parnell Square West, 4 minute walk".
-    static func stop(name: String, isNearest: Bool = false, walkingMinutes: Int? = nil) -> String {
-        guard isNearest else { return "Stop, \(name)" }
-        guard let walkingMinutes else { return "Nearest stop, \(name)" }
-        let unit = walkingMinutes == 1 ? "minute" : "minutes"
-        return "Nearest stop, \(name), \(walkingMinutes) \(unit) walk"
+    /// "Stop, Parnell Square West".
+    static func stop(name: String) -> String {
+        "Stop, \(name)"
     }
 
     /// "To Ongar, in 5 minutes, live, 2 minutes late".
