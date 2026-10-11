@@ -27,43 +27,6 @@ final class RouteStopServiceTests: XCTestCase {
         ])
     }
 
-    func testNearbyStopsDeduplicatesAndSortsByDistance() async {
-        let service = makeService()
-        let nearby = await service.nearbyStops(
-            routeNames: ["39A", "46A", "unknown"],
-            latitude: 53.3498,
-            longitude: -6.2603,
-            radius: 500
-        )
-
-        XCTAssertEqual(nearby.map(\.id), ["A", "B"], "C is 5.6 km away; A appears once")
-        XCTAssertEqual(nearby[0].routeNames, ["39A", "46A"])
-        XCTAssertEqual(nearby[0].distance, 0, accuracy: 0.001)
-        XCTAssertEqual(nearby[1].routeNames, ["39A"])
-        XCTAssertEqual(nearby[1].distance, 244.6, accuracy: 0.5)
-    }
-
-    func testNearbyStopsOnlyForRequestedRoutes() async {
-        let nearby = await makeService().nearbyStops(
-            routeNames: ["46A"],
-            latitude: 53.3498,
-            longitude: -6.2603,
-            radius: 500
-        )
-        XCTAssertEqual(nearby.map(\.id), ["A"])
-        XCTAssertEqual(nearby[0].routeNames, ["46A"])
-    }
-
-    func testNearbyStopsRespectsRadius() async {
-        let nearby = await makeService().nearbyStops(
-            routeNames: ["39A"],
-            latitude: 53.3498,
-            longitude: -6.2603,
-            radius: 100
-        )
-        XCTAssertEqual(nearby.map(\.id), ["A"])
-    }
-
     func testStopsForDirectionMergesEntries() async {
         let stops = await makeService().stops(for: "220", direction: 0)
         XCTAssertEqual(stops.map(\.id), ["D1", "C1"])

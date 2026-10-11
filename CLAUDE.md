@@ -32,45 +32,52 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
 Turas/
   TurasApp.swift            entry point; AppDependencies creates the services once
   Config.swift              Info.plist -> ServerConfig (nil -> ServerNotConfiguredView)
-  Formatting.swift          arrival text and VoiceOver labels (unit tested)
-  Models/                   Vehicle, StopArrival, RouteStop, RouteShape, RouteRef,
-                            TransitRoute, TransportMode, NearbyStop
+  Theme.swift               colour tokens (Assets.xcassets, light/dark), line colours, metrics
+  Formatting.swift          departure/arrival text, VoiceOver labels, error text (unit tested)
+  Models/                   Vehicle, StopArrival, RouteStop, RouteShape, RouteRef, TransitRoute,
+                            TransportMode, Nearby (NearbyResponse...), Search (SearchResponse...),
+                            RouteLabelling (shared operatorLabel/headsign(for:) for
+                            TransitRoute and RouteSearchResult)
   Services/
     TurasServerService      actor; the only HTTP client (x-api-key header)
     StaticDataStore         actor; routes/stops from server -> disk cache -> bundle
-    RouteStopService        actor; bundled route_stops.json, nearby-stop search
+    RouteStopService        actor; bundled route_stops.json
     RouteShapeService       actor; bundled route_shapes.json
-    LocationService         @MainActor CLLocationManager wrapper (async/await)
-    FavouritesStore         @MainActor recents (max 20) and starred routes, UserDefaults
-  ViewModels/MapViewModel   @MainActor; selection state machine, polling, camera
-  Views/                    ContentView (map), RouteSearchBar, sheets, annotations
-TurasTests/                 XCTest unit tests; Fixtures/ holds the contract JSON
+    PlaceSearchService      PlaceSearching; MapKitPlaceSearch (MKLocalSearch) limited to Ireland
+    LocationService         @MainActor CLLocationManager wrapper; LocationProviding
+    AppClock                now + sleep, injected into the models
+    FavouritesStore         @MainActor recents and starred routes (no UI yet)
+  ViewModels/               HomeModel, NearbyModel, SearchModel, RouteFocusModel (all @MainActor)
+  Views/Home/               HomeView, DepartureTimeline, SearchResultsView, RouteFocusView
+  Views/Components/         RouteBadge, TimeStack, DepartureCard, StopPin, ModeTabs,
+                            SearchField, PrimingCard, StatusBanner
+TurasTests/                 XCTest unit tests; Fixtures/ holds the contract JSON;
+                            Support/ has ManualClock, waitUntil and the fake sources
+TurasUITests/               XCUITest smoke test (screenshots as attachments)
 ```
 
-Large JSON is decoded inside actors (off the main thread) and preloaded when the map
-appears. Views talk only to `MapViewModel` (plus `FavouritesStore` for the star and
-recent rows) and `TurasServerService` (arrivals sheet).
+### Home screen
 
-### Selection state machine
+`HomeModel.screen` is the single source of truth: `.timeline`, `.search` or
+`.focus(RouteFocusTarget)`.
 
-`MapViewModel.selection: RouteSelection` is the single source of truth. `searchText`
-only backs the text field.
+| State | Map shows | Bottom half | Polling |
+|---|---|---|---|
+| `.timeline` | pins from `/nearby`'s `stops` | mode tabs + rows sorted by first time | `/nearby` 30 s |
+| `.search` | unchanged | Stops / Routes / Places (8 each) | none (250 ms debounce) |
+| `.focus` | one direction's bundled shape, its vehicles, the stop | route, destination, stop, next times, ⇄ | vehicles + arrivals 30 s |
 
-| State | Map shows | Polling |
-|---|---|---|
-| `.idle` | nearby stops (500 m, bundled data) | off |
-| `.route(RouteRef)` | all shapes of the route, its vehicles, direction picker | vehicles every 30 s |
-| `.routeAndDirection(RouteRef, direction:)` | one direction's shape, stops, vehicles; nearest stop | vehicles every 30 s |
-
-- `selectRoute`, `selectDirection`, `clearDirection`, `clearSearch`, `selectMode`,
-  `submitSearch` (Done/return: selects the route the text uniquely identifies, so "39a"
-  selects "39A"; otherwise stays in search) and `selectSaved` (recent/starred) are the
-  transitions.
-- Polling stops when the scene goes to the background and restarts on `.active` when a
-  route is selected. An empty vehicle list replaces the old one; errors keep it.
-- Direction options are the union of shape, bundled-stop and server directions; without a
-  headsign they read "Direction 0/1".
-- Stop sheets refetch arrivals every 30 s while open and support pull to refresh.
+- The timeline follows the map: `HomeView` reports `onMapCameraChange(.onEnd)`, and
+  `NearbyModel` fetches 0.6 s later if the centre moved more than 50 m. Opening focus
+  pauses the timeline and saves the camera; closing restores both.
+- Location: not determined shows the `PrimingCard` ("Allow location" / "Not now");
+  denied, restricted or "Not now" centres on O'Connell Bridge with "Showing city
+  centre"; revoked while running keeps the map ("Location is off").
+- Errors keep the last rows with "Updated N min ago" and Retry; 503 shows "Turas is
+  starting up…" and retries; 429 retries silently on the next tick.
+- Search stop rows show their modes and distance from the map centre ("Bus · 1.2 km"),
+  which tells same-name stops apart.
+- Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep.
 
 ### Route identity
 
@@ -99,8 +106,7 @@ are not in the repo):
 
 Routes and stops come from the server when possible (`StaticDataStore`, JSON cache in
 `Caches/StaticData`, 7-day TTL, refreshed in the background at launch). The bundled
-routes and stops are the fallback when the cache is empty and the network fails, and the
-source for nearby-stop search.
+routes and stops are the fallback when the cache is empty and the network fails.
 
 ## Server contract
 
@@ -114,14 +120,17 @@ sends `x-api-key`. Dates are RFC 3339; the decoder accepts whole or fractional s
 | `fetchStops(route:agency:direction:)` | `GET /api/v1/stops?route=&direction=[&agency=]` -> `[RouteStop]` |
 | `fetchArrivals(stopId:route:direction:)` | `GET /api/v1/arrivals?stop_id=&route=&direction=[&agency=]` -> `[StopArrival]` |
 | `fetchLuasArrivals(stopId:direction:routeName:)` | `GET /api/v1/luas/arrivals?stop_id=&direction=&route=` |
+| `fetchNearby(lat:lon:mode:)` | `GET /api/v1/nearby?lat=&lon=&mode=` -> `{stops: [{id, name, lat, lon, distance_m}], departures: [{route, agency_id, direction, headsign?, stop_id, distance_m, times: [{trip_id, at, delay, source: live\|realtime\|timetable, cancelled}]}]}` |
+| `search(query:mode:)` | `GET /api/v1/search?q=[&mode=]` -> `{stops: [{id, name, lat, lon, modes}], routes: [{name, agency_id, agency_name?, mode, headsign_outbound?, headsign_inbound?}]}` |
 
 Errors are `{"error": "..."}`. 401/403 means a bad key, 429 the per-client rate limit
-(10 req/s, burst 20), 503 that the server is still loading its schedule after a restart;
-`MapViewModel.userFriendlyError` maps each to a message and polling retries.
+(10 req/s, burst 20), 503 that the server is still loading its schedule after a restart,
+502 (`/nearby?mode=luas`) that every Luas forecast call failed; `ServerErrorText.message`
+maps each to a message and the models keep their last good data and retry.
 
 ### Contract fixtures
 
-`TurasTests/Fixtures/{vehicles,arrivals,routes,stops,error}.json` are byte-identical
+`TurasTests/Fixtures/{vehicles,arrivals,routes,stops,error,nearby,search}.json` are byte-identical
 copies of the server's `testdata/contract/*.json`, which the server's
 `TestContractFixtures` checks against its encoder. `ContractFixtureTests`
 (`TurasTests/ContractFixtureTests.swift`) decodes them here. When the server contract

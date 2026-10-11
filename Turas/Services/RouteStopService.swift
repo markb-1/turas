@@ -3,8 +3,7 @@ import os
 
 /// Route stops from the bundled route_stops.json (~2 MB).
 ///
-/// Same pattern as RouteShapeService: an actor that decodes the file once,
-/// off the main thread. Routes that exist under two agencies (e.g. Dublin
+/// An actor that decodes the file once, off the main thread. Routes that exist under two agencies (e.g. Dublin
 /// 220 and Cork 220) have one entry per agency and direction in the file;
 /// they are merged here because the file is keyed by short name only.
 actor RouteStopService {
@@ -39,43 +38,6 @@ actor RouteStopService {
     /// Directions (0/1) that have stops for this route.
     func directions(for routeName: String) -> Set<Int> {
         Set(stops(for: routeName).filter { !$0.stops.isEmpty }.map(\.direction))
-    }
-
-    /// Returns deduplicated stops within `radius` metres of the given point,
-    /// served by any route in `routeNames`, nearest first. Each NearbyStop
-    /// lists every route name that serves it.
-    func nearbyStops(
-        routeNames: Set<String>,
-        latitude: Double,
-        longitude: Double,
-        radius: Double
-    ) -> [NearbyStop] {
-        let allStops = loaded()
-        var seen: [String: (stop: RouteStop, routeNames: Set<String>, distance: Double)] = [:]
-
-        for routeName in routeNames {
-            guard let directions = allStops[routeName] else { continue }
-            for dir in directions {
-                for stop in dir.stops {
-                    let d = GeoUtils.straightLineDistance(
-                        lat1: latitude, lon1: longitude,
-                        lat2: stop.lat, lon2: stop.lon
-                    )
-                    guard d <= radius else { continue }
-
-                    if var existing = seen[stop.id] {
-                        existing.routeNames.insert(routeName)
-                        seen[stop.id] = existing
-                    } else {
-                        seen[stop.id] = (stop: stop, routeNames: [routeName], distance: d)
-                    }
-                }
-            }
-        }
-
-        return seen.values
-            .sorted { ($0.distance, $0.stop.id) < ($1.distance, $1.stop.id) }
-            .map { NearbyStop(stop: $0.stop, routeNames: $0.routeNames, distance: $0.distance) }
     }
 
     private func loaded() -> [String: [RouteStopDirection]] {
