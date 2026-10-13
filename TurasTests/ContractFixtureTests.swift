@@ -168,7 +168,7 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(response.departures.map { $0.times.first?.at ?? .distantFuture },
                        response.departures.map { $0.times.first?.at ?? .distantFuture }.sorted(), "rows sort by first time")
 
-        // Values from the spec's example.
+        // Values from the server's fixture.
         XCTAssertEqual(response.stop.id, "8220DB000400")
         XCTAssertEqual(response.stop.name, "College Green")
         XCTAssertEqual(response.stop.code, "400")
@@ -183,6 +183,9 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(time.delay, 120)
         XCTAssertEqual(time.source, .live)
         XCTAssertFalse(time.cancelled)
+        XCTAssertEqual(first.times.map(\.source), [.live, .realtime, .timetable])
+        XCTAssertEqual(first.times.map(\.cancelled), [false, false, true])
+        XCTAssertNil(response.departures[1].headsign)
     }
 
     func testStations() throws {
