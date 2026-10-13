@@ -41,6 +41,8 @@ final class StopModel: ObservableObject {
     private let clock: AppClock
     private let userLocation: CLLocationCoordinate2D?
     private var refreshTask: Task<Void, Never>?
+    /// Bumped whenever an answer in flight must not land: on stop, on pause
+    /// and when a new loop starts (its fetch overtakes any older one).
     private var generation = 0
     /// Between `start()` and `stop()`.
     private var isStarted = false
@@ -99,6 +101,9 @@ final class StopModel: ObservableObject {
         guard !isStopped else { return }
         isStarted = true
         await refresh()
+        // A resume, return to the foreground or retry during the first
+        // fetch has already started the loop with a fetch of its own.
+        guard refreshTask == nil else { return }
         startRefreshing(immediately: false)
     }
 
@@ -111,9 +116,11 @@ final class StopModel: ObservableObject {
         cancelRefreshing()
     }
 
-    /// Route focus opened over the stop view.
+    /// Route focus opened over the stop view; an answer in flight is
+    /// dropped (resume fetches afresh).
     func pause() {
         isPaused = true
+        generation += 1
         cancelRefreshing()
     }
 
@@ -157,6 +164,7 @@ final class StopModel: ObservableObject {
     private func startRefreshing(immediately: Bool) {
         cancelRefreshing()
         guard isStarted, isForeground, !isPaused, !isGone else { return }
+        generation += 1
         let clock = clock
         let interval = Self.refreshInterval
         // Weak, and strong only for one refresh: a model nobody holds ends
@@ -177,10 +185,10 @@ final class StopModel: ObservableObject {
     }
 
     /// Fetches the stop's departures. A failure keeps the last rows and
-    /// sets the status. A stopped model neither fetches nor applies an
-    /// answer still in flight (the view it fed is gone).
+    /// sets the status. A stopped or gone model does not fetch, and an
+    /// answer overtaken by `stop()`, `pause()` or a newer loop is dropped.
     func refresh() async {
-        guard !isStopped else { return }
+        guard !isStopped, !isGone else { return }
         let generation = generation
         let (source, stopId) = (source, target.id)
         do {

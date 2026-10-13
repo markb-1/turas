@@ -135,6 +135,11 @@ final class StopModelTests: XCTestCase {
         model.retry()
         await drain(source)
         XCTAssertEqual(source.callCount, 2, "nothing to retry")
+
+        await source.setResponse(SampleData.stopDepartures(for: collegeGreen.id), for: collegeGreen.id)
+        await model.refresh()
+        XCTAssertEqual(source.callCount, 2, "a gone stop is not fetched")
+        XCTAssertEqual(model.status, .gone, "and never comes back to life while polling is dead")
         model.stop()
     }
 
@@ -242,16 +247,127 @@ final class StopModelTests: XCTestCase {
     }
 
     func testAnswerArrivingAfterStopIsDropped() async {
-        // A refresh scheduled just before the stop view closed: whether it
-        // reaches the source before or after stop(), its answer never lands.
+        // The stop view closes while a fetch is at the source: its answer,
+        // arriving afterwards, never lands.
         let source = FakeStopSource()
         let model = makeModel(source: source)
+        await source.hold(collegeGreen.id)
         let fetch = Task { await model.refresh() }
+        await waitUntil("fetch reached the source") { source.callCount == 1 }
         model.stop()
+        await source.release(collegeGreen.id)
         await fetch.value
         XCTAssertEqual(model.departures, [], "a stopped model never applies an answer")
+        XCTAssertNil(model.info)
         XCTAssertEqual(model.status, .loading)
         XCTAssertNil(model.lastUpdated)
+    }
+
+    func testFailureArrivingAfterStopIsDropped() async {
+        let source = FakeStopSource()
+        await source.setError(TurasServerError.httpError(statusCode: 500))
+        let model = makeModel(source: source)
+        await source.hold(collegeGreen.id)
+        let fetch = Task { await model.refresh() }
+        await waitUntil("fetch reached the source") { source.callCount == 1 }
+        model.stop()
+        await source.release(collegeGreen.id)
+        await fetch.value
+        XCTAssertEqual(model.status, .loading, "a stopped model never shows a failure")
+    }
+
+    // MARK: - Overtaken answers
+
+    func testOvertakenFailureDoesNotReplaceFresherRows() async {
+        // start()'s first fetch is slow and fails; meanwhile the app went to
+        // the background and back, and the foreground fetch succeeded.
+        let source = FakeStopSource()
+        await source.setError(TurasServerError.httpError(statusCode: 500))
+        await source.hold(collegeGreen.id)
+        let model = makeModel(source: source)
+        let starting = Task { await model.start() }
+        await waitUntil("first fetch at the source") { source.callCount == 1 }
+
+        await source.setError(nil)
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        await waitUntil { model.status == .loaded }
+        let freshUpdate = model.lastUpdated
+
+        await source.release(collegeGreen.id)
+        await starting.value
+        XCTAssertEqual(model.status, .loaded, "the overtaken failure is dropped")
+        XCTAssertEqual(model.departures.map(\.route), ["39A", "46A"])
+        XCTAssertEqual(model.lastUpdated, freshUpdate)
+        await waitUntil("one loop, sleeping") { self.clock.sleeperCount == 1 }
+        XCTAssertEqual(source.callCount, 2)
+        model.stop()
+    }
+
+    func testSlowFirstFetchKeepsTheLoopAlreadyRunning() async {
+        // The foreground fetch has already started the loop; start()'s slow
+        // first fetch finishing must not restart it (that would push the
+        // next refresh back by however long the first fetch took).
+        let source = FakeStopSource()
+        await source.hold(collegeGreen.id)
+        let model = makeModel(source: source)
+        let starting = Task { await model.start() }
+        await waitUntil("first fetch at the source") { source.callCount == 1 }
+
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        await waitUntil { model.status == .loaded }
+        await waitUntil("loop sleeping") { self.clock.sleeperCount == 1 }
+        clock.advance(by: 20)
+
+        await source.release(collegeGreen.id)
+        await starting.value
+        clock.advance(by: 10)
+        await waitUntil("refresh 30 s after the foreground fetch") { source.callCount == 3 }
+        model.stop()
+    }
+
+    func testOvertakenAnswerDoesNotReplaceFresherRows() async {
+        // A slow answer (nothing leaving) lands after Retry's newer one.
+        let source = FakeStopSource()
+        let fresh = SampleData.stopDepartures(for: collegeGreen.id)
+        let info = StopInfo(id: collegeGreen.id, name: "College Green", code: "400", lat: collegeGreen.lat, lon: collegeGreen.lon, modes: [.bus])
+        await source.setResponse(StopDepartures(stop: info, departures: []), for: collegeGreen.id)
+        await source.hold(collegeGreen.id)
+        let model = makeModel(source: source)
+        let starting = Task { await model.start() }
+        await waitUntil("first fetch at the source") { source.callCount == 1 }
+
+        await source.setResponse(fresh, for: collegeGreen.id)
+        model.retry()
+        await waitUntil { model.status == .loaded }
+
+        await source.release(collegeGreen.id)
+        await starting.value
+        XCTAssertEqual(model.status, .loaded, "the overtaken answer is dropped")
+        XCTAssertEqual(model.departures.map(\.route), ["39A", "46A"])
+        model.stop()
+    }
+
+    func testAnswerInFlightWhenPausedIsDropped() async {
+        // Route focus opens while a fetch is at the source; resume fetches afresh.
+        let source = FakeStopSource()
+        await source.hold(collegeGreen.id)
+        let model = makeModel(source: source)
+        let starting = Task { await model.start() }
+        await waitUntil("first fetch at the source") { source.callCount == 1 }
+
+        model.pause()
+        await source.release(collegeGreen.id)
+        await starting.value
+        XCTAssertEqual(model.status, .loading, "the answer in flight at pause is dropped")
+        XCTAssertNil(model.lastUpdated)
+        XCTAssertEqual(clock.sleeperCount, 0, "no loop while paused")
+
+        model.resume()
+        await waitUntil { model.status == .loaded }
+        XCTAssertEqual(source.callCount, 2)
+        model.stop()
     }
 
     func testReleasedModelStopsRefreshing() async {
