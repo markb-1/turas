@@ -13,11 +13,11 @@ struct CentreMarker: View {
     var body: some View {
         VStack(spacing: 0) {
             Circle()
-                .fill(Theme.brand)
+                .fill(Theme.ink)
                 .frame(width: 18, height: 18)
                 .overlay(Circle().stroke(Theme.card, lineWidth: 3))
             Rectangle()
-                .fill(Theme.brand)
+                .fill(Theme.ink)
                 .frame(width: 3, height: Self.height - 18)
         }
         .shadow(color: .black.opacity(isLifted ? 0.35 : 0.2), radius: isLifted ? 6 : 2, y: isLifted ? 6 : 1)
