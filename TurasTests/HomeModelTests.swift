@@ -8,7 +8,7 @@ import XCTest
 @MainActor
 private final class FakeLocation: LocationProviding {
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
-    var userLocation: CLLocationCoordinate2D?
+    @Published var userLocation: CLLocationCoordinate2D?
     /// What the user answers when the prompt is shown.
     var answer: CLAuthorizationStatus = .authorizedWhenInUse
     var fix: CLLocationCoordinate2D? = CLLocationCoordinate2D(latitude: 53.3441, longitude: -6.2595)
@@ -16,6 +16,10 @@ private final class FakeLocation: LocationProviding {
 
     var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> {
         $authorizationStatus.eraseToAnyPublisher()
+    }
+
+    var userLocationPublisher: AnyPublisher<CLLocationCoordinate2D?, Never> {
+        $userLocation.eraseToAnyPublisher()
     }
 
     func requestLocation() async -> CLLocationCoordinate2D? {
@@ -49,6 +53,8 @@ final class HomeModelTests: XCTestCase {
     private let collegeGreen = CLLocationCoordinate2D(latitude: 53.3441, longitude: -6.2595)
     private let collegeGreenStop = StopTarget(SampleData.collegeGreen, mode: .bus)
     private let dameStreetStop = StopTarget(SampleData.dameStreet, mode: .bus)
+    /// The user location each route focus was made with.
+    private var focusUserLocations: [CLLocationCoordinate2D?] = []
 
     private func makeModel(refreshRoutes: HomeModel.RouteRefresh? = nil) -> HomeModel {
         let nearby = NearbyModel(source: nearbySource, clock: clock.appClock)
@@ -58,9 +64,10 @@ final class HomeModelTests: XCTestCase {
         let clock = clock
         let focusSource = focusSource
         let stopSource = stopSource
-        return HomeModel(nearby: nearby, search: search, stations: stations, location: location, refreshRoutes: refreshRoutes, makeFocus: { target, centre, userLocation in
-            RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: focusSource,
-                            staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
+        return HomeModel(nearby: nearby, search: search, stations: stations, location: location, refreshRoutes: refreshRoutes, makeFocus: { [weak self] target, centre, userLocation in
+            self?.focusUserLocations.append(userLocation)
+            return RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: focusSource,
+                                   staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
         }, makeStop: { target, userLocation in
             StopModel(target: target, userLocation: userLocation, source: stopSource, clock: clock.appClock)
         })
@@ -572,6 +579,78 @@ final class HomeModelTests: XCTestCase {
         await waitUntil { self.clock.sleeperCount == 1 }
         XCTAssertEqual(nearbySource.callCount, 1, "the timeline stays paused")
         model.closeStop()
+    }
+
+    func testStopViewShowsNoDistanceWithoutAuthorisation() async throws {
+        location.authorizationStatus = .denied
+        location.userLocation = collegeGreen // a fix from before location was turned off
+        let model = makeModel()
+        model.onAppear()
+        await openStop(model, dameStreetStop)
+        let stop = try XCTUnwrap(model.stop)
+        XCTAssertNil(stop.distanceFromUser, "an old fix is not the user's location once location is off")
+        XCTAssertEqual(stop.caption, "Stop 401")
+
+        model.openFocus(departure: stop.departures[0])
+        XCTAssertEqual(focusUserLocations.count, 1)
+        XCTAssertNil(focusUserLocations[0], "route focus gets no walking time either")
+        model.closeFocus()
+        model.closeStop()
+    }
+
+    func testStopViewDistanceFollowsAuthorisationWhileOpen() async throws {
+        location.authorizationStatus = .authorizedWhenInUse
+        let model = makeModel()
+        model.onAppear()
+        await waitUntil { model.locationState == .located }
+        await openStop(model, dameStreetStop)
+        let stop = try XCTUnwrap(model.stop)
+        let distance = try XCTUnwrap(stop.distanceFromUser)
+        XCTAssertEqual(Double(distance), 432, accuracy: 5)
+        XCTAssertEqual(stop.caption?.hasPrefix("Stop 401 · "), true)
+
+        location.authorizationStatus = .denied
+        await waitUntil("distance dropped on revoke") { stop.distanceFromUser == nil }
+        XCTAssertEqual(stop.caption, "Stop 401")
+
+        // Turned back on in Settings: the new fix brings the distance back.
+        location.authorizationStatus = .authorizedWhenInUse
+        await waitUntil("distance back") { stop.distanceFromUser == distance }
+
+        // "Allow Once" expiring.
+        location.authorizationStatus = .notDetermined
+        await waitUntil("distance dropped on expiry") { stop.distanceFromUser == nil }
+        model.closeStop()
+    }
+
+    func testReturnToTheForegroundRefreshesTheFixAndTheStopViewsDistance() async throws {
+        location.authorizationStatus = .authorizedWhenInUse
+        let model = makeModel()
+        model.onAppear()
+        await waitUntil { model.locationState == .located }
+        await openStop(model, dameStreetStop)
+        let stop = try XCTUnwrap(model.stop)
+        XCTAssertNotNil(stop.distanceFromUser)
+
+        location.fix = dameStreetStop.coordinate // the user walked to the stop
+        model.scenePhaseChanged(to: .background)
+        model.scenePhaseChanged(to: .active)
+        await waitUntil("fresh fix requested") { self.location.requests == 2 }
+        await waitUntil("caption follows the new fix") { stop.distanceFromUser == 0 }
+        XCTAssertTrue(model.stop === stop, "the stop view is not rebuilt")
+        model.closeStop()
+    }
+
+    func testReturnToTheForegroundWithoutAuthorisationAsksForNothing() async {
+        for status in [CLAuthorizationStatus.notDetermined, .denied] {
+            location.authorizationStatus = status
+            let model = makeModel()
+            model.onAppear()
+            model.scenePhaseChanged(to: .background)
+            model.scenePhaseChanged(to: .active)
+            await drain()
+            XCTAssertEqual(location.requests, 0, "no fix (and never the iOS prompt) when \(status.rawValue)")
+        }
     }
 
     func testPinTappedDuringSearchClearsTheSearch() async {

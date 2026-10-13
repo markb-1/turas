@@ -36,10 +36,12 @@ final class StopModel: ObservableObject {
     @Published private(set) var departures: [NearbyDeparture] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var status: Status = .loading
+    /// Where the user is, while location is authorised. HomeModel keeps it
+    /// current as new fixes arrive and authorisation changes.
+    @Published var userLocation: CLLocationCoordinate2D?
 
     private let source: StopSource
     private let clock: AppClock
-    private let userLocation: CLLocationCoordinate2D?
     private var refreshTask: Task<Void, Never>?
     /// Bumped whenever an answer in flight must not land: on stop, on pause
     /// and when a new loop starts (its fetch overtakes any older one).

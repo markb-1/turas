@@ -43,7 +43,8 @@ final class HomeModel: ObservableObject {
     }
 
     typealias FocusFactory = @MainActor (RouteFocusTarget, CLLocationCoordinate2D, CLLocationCoordinate2D?) -> RouteFocusModel
-    /// Makes the stop view's model for a stop and the user's location.
+    /// Makes the stop view's model for a stop and the user's location
+    /// (nil without authorisation).
     typealias StopFactory = @MainActor (StopTarget, CLLocationCoordinate2D?) -> StopModel
     /// Re-fetches stale route lists (StaticDataStore.refreshRoutesIfStale).
     typealias RouteRefresh = @Sendable () async -> Void
@@ -108,6 +109,14 @@ final class HomeModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] status in self?.authorizationChanged(to: status) }
             .store(in: &cancellables)
+        // The stop view's distance follows new fixes and authorisation. The
+        // publishers fire before the properties change, so use their values.
+        location.userLocationPublisher
+            .combineLatest(location.authorizationStatusPublisher)
+            .sink { [weak self] coordinate, status in
+                self?.stop?.userLocation = Self.isAuthorised(status) ? coordinate : nil
+            }
+            .store(in: &cancellables)
     }
 
     /// Only while iOS has not been asked: an authorised user waiting for
@@ -134,6 +143,16 @@ final class HomeModel: ObservableObject {
     }
 
     var userLocation: CLLocationCoordinate2D? { location.userLocation }
+
+    /// The user's location while authorised: a fix from before location
+    /// was turned off is no longer where the user is.
+    private var authorisedUserLocation: CLLocationCoordinate2D? {
+        Self.isAuthorised(location.authorizationStatus) ? location.userLocation : nil
+    }
+
+    nonisolated private static func isAuthorised(_ status: CLAuthorizationStatus) -> Bool {
+        status == .authorizedWhenInUse || status == .authorizedAlways
+    }
 
     /// A route-list refresh is running.
     var isRefreshingRoutes: Bool { routeRefreshTask != nil }
@@ -183,6 +202,7 @@ final class HomeModel: ObservableObject {
     func scenePhaseChanged(to phase: ScenePhase) {
         if phase == .active {
             refreshRouteListsIfStale()
+            refreshLocation()
         }
         focus?.scenePhaseChanged(to: phase)
         stop?.scenePhaseChanged(to: phase)
@@ -233,6 +253,13 @@ final class HomeModel: ObservableObject {
     /// authorisation is still undecided).
     func goNearMe() {
         Task { await locate(movingCamera: true) }
+    }
+
+    /// Back in the foreground: a fresh fix for the stop view's distance and
+    /// route focus's walking time. Never prompts, and the map stays put.
+    private func refreshLocation() {
+        guard Self.isAuthorised(location.authorizationStatus), !isLocating else { return }
+        Task { await locate(movingCamera: false) }
     }
 
     /// Asks for a fix. Without one, a first answer falls back to the city
@@ -357,7 +384,7 @@ final class HomeModel: ObservableObject {
         } else if !isTimelinePaused {
             leaveTimeline()
         }
-        let model = makeStop(target, location.userLocation)
+        let model = makeStop(target, authorisedUserLocation)
         stopCancellable = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         stop = model
         screen = .stop(target)
@@ -401,7 +428,7 @@ final class HomeModel: ObservableObject {
         } else {
             leaveTimeline()
         }
-        let model = makeFocus(target, focusCentre, location.userLocation)
+        let model = makeFocus(target, focusCentre, authorisedUserLocation)
         focusCancellable = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         focus = model
         screen = .focus(target)

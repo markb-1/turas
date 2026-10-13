@@ -125,6 +125,8 @@ protocol LocationProviding: AnyObject {
     var userLocation: CLLocationCoordinate2D? { get }
     var authorizationStatus: CLAuthorizationStatus { get }
     var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> { get }
+    /// Every new fix (published before `userLocation` changes).
+    var userLocationPublisher: AnyPublisher<CLLocationCoordinate2D?, Never> { get }
     /// Asks for permission if needed, then returns the location once; nil
     /// when denied or no fix is available.
     func requestLocation() async -> CLLocationCoordinate2D?
@@ -133,5 +135,9 @@ protocol LocationProviding: AnyObject {
 extension LocationService: LocationProviding {
     var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> {
         $authorizationStatus.eraseToAnyPublisher()
+    }
+
+    var userLocationPublisher: AnyPublisher<CLLocationCoordinate2D?, Never> {
+        $userLocation.eraseToAnyPublisher()
     }
 }

@@ -129,5 +129,6 @@ private final class RenderLocation: LocationProviding {
     var userLocation: CLLocationCoordinate2D? { nil }
     var authorizationStatus: CLAuthorizationStatus { .denied }
     var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> { Just(.denied).eraseToAnyPublisher() }
+    var userLocationPublisher: AnyPublisher<CLLocationCoordinate2D?, Never> { Just(nil).eraseToAnyPublisher() }
     func requestLocation() async -> CLLocationCoordinate2D? { nil }
 }
