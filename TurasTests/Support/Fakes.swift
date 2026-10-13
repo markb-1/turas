@@ -8,6 +8,9 @@ enum SampleData {
     static let collegeGreen = DepartureStop(id: "8220DB000400", name: "College Green", lat: 53.3441, lon: -6.2595, distanceM: 90)
     static let dameStreet = DepartureStop(id: "8220DB000401", name: "Dame Street", lat: 53.3439, lon: -6.2660, distanceM: 420)
 
+    static let abbeyStreet = DepartureStop(id: "LUAS-ABB", name: "Abbey Street", lat: 53.3485, lon: -6.2583, distanceM: 300)
+    static let taraStreet = DepartureStop(id: "IR-TARA", name: "Tara Street", lat: 53.3470, lon: -6.2545, distanceM: 350)
+
     static func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
         DepartureTime(tripId: "trip-\(minutes)", at: elevenUTC.addingTimeInterval(TimeInterval(minutes * 60)),
                       delay: 0, source: source, cancelled: cancelled)
@@ -24,17 +27,70 @@ enum SampleData {
                                 distanceM: 420, times: [time(5)]),
             ])
         case .luas:
-            let abbey = DepartureStop(id: "LUAS-ABB", name: "Abbey Street", lat: 53.3485, lon: -6.2583, distanceM: 300)
-            return NearbyResponse(stops: [abbey], departures: [
-                NearbyDeparture(route: "Red", agencyId: "10000", direction: 0, headsign: "Tallaght", stopId: abbey.id,
+            return NearbyResponse(stops: [abbeyStreet], departures: [
+                NearbyDeparture(route: "Red", agencyId: "10000", direction: 0, headsign: "Tallaght", stopId: abbeyStreet.id,
                                 distanceM: 300, times: [time(3), time(9)]),
             ])
         case .train:
-            let tara = DepartureStop(id: "IR-TARA", name: "Tara Street", lat: 53.3470, lon: -6.2545, distanceM: 350)
-            return NearbyResponse(stops: [tara], departures: [
-                NearbyDeparture(route: "DART", agencyId: "IR", direction: 1, headsign: "Bray", stopId: tara.id,
+            return NearbyResponse(stops: [taraStreet], departures: [
+                NearbyDeparture(route: "DART", agencyId: "IR", direction: 1, headsign: "Bray", stopId: taraStreet.id,
                                 distanceM: 350, times: [time(6)]),
             ])
+        }
+    }
+
+    /// What `/stations` lists: two stations per rail mode, none for bus.
+    static func stations(mode: TransportMode) -> [Station] {
+        switch mode {
+        case .bus:
+            return []
+        case .luas:
+            return [Station(id: "LUAS-ABB", name: "Abbey Street", lat: 53.3485, lon: -6.2583),
+                    Station(id: "LUAS-JER", name: "Jervis", lat: 53.3478, lon: -6.2665)]
+        case .train:
+            return [Station(id: "IR-CON", name: "Connolly", lat: 53.3531, lon: -6.2489),
+                    Station(id: "IR-TARA", name: "Tara Street", lat: 53.3470, lon: -6.2545)]
+        }
+    }
+
+    /// What `/departures` answers for the sample stops: every route and
+    /// direction at the stop, distance 0, times from `elevenUTC`.
+    static func stopDepartures(for stopId: String) -> StopDepartures? {
+        switch stopId {
+        case collegeGreen.id:
+            return StopDepartures(
+                stop: StopInfo(id: collegeGreen.id, name: "College Green", code: "400", lat: collegeGreen.lat, lon: collegeGreen.lon, modes: [.bus]),
+                departures: [
+                    NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: "Ongar", stopId: collegeGreen.id,
+                                    distanceM: 0, times: [time(2), time(14, source: .realtime), time(27, source: .timetable)]),
+                    NearbyDeparture(route: "46A", agencyId: "1", direction: 0, headsign: "Dún Laoghaire", stopId: collegeGreen.id,
+                                    distanceM: 0, times: [time(8, source: .timetable)]),
+                ])
+        case dameStreet.id:
+            return StopDepartures(
+                stop: StopInfo(id: dameStreet.id, name: "Dame Street", code: "401", lat: dameStreet.lat, lon: dameStreet.lon, modes: [.bus]),
+                departures: [
+                    NearbyDeparture(route: "16", agencyId: "1", direction: 1, headsign: "Ballinteer", stopId: dameStreet.id,
+                                    distanceM: 0, times: [time(5)]),
+                ])
+        case abbeyStreet.id:
+            return StopDepartures(
+                stop: StopInfo(id: abbeyStreet.id, name: "Abbey Street", code: nil, lat: abbeyStreet.lat, lon: abbeyStreet.lon, modes: [.luas]),
+                departures: [
+                    NearbyDeparture(route: "Red", agencyId: "10000", direction: 0, headsign: "Tallaght", stopId: abbeyStreet.id,
+                                    distanceM: 0, times: [time(3), time(9)]),
+                    NearbyDeparture(route: "Red", agencyId: "10000", direction: 1, headsign: "The Point", stopId: abbeyStreet.id,
+                                    distanceM: 0, times: [time(4), time(11)]),
+                ])
+        case taraStreet.id:
+            return StopDepartures(
+                stop: StopInfo(id: taraStreet.id, name: "Tara Street", code: nil, lat: taraStreet.lat, lon: taraStreet.lon, modes: [.train]),
+                departures: [
+                    NearbyDeparture(route: "DART", agencyId: "IR", direction: 1, headsign: "Bray", stopId: taraStreet.id,
+                                    distanceM: 0, times: [time(6)]),
+                ])
+        default:
+            return nil
         }
     }
 }
@@ -176,6 +232,77 @@ actor FakeFocusSource: FocusSource {
         lastArrivalRequest = (stopId, RouteRef(name: routeName), direction)
         if let error { throw error }
         return luasArrivals
+    }
+}
+
+/// A scripted StopSource: the SampleData answer for a stop, 404 for an
+/// unknown stop, or the scripted error. Counts calls by stop ID.
+///
+/// To test a stale answer, hold a stop's answer back: `hold(stopId)` makes
+/// the next `fetchDepartures` for that stop record its call, then suspend
+/// (with its answer already decided) until `release(stopId)`. Wait for
+/// `callCount` to include the held call, switch stops, then release.
+/// Without `hold` every call answers immediately.
+actor FakeStopSource: StopSource {
+    private var responses: [String: StopDepartures] = Dictionary(uniqueKeysWithValues:
+        [SampleData.collegeGreen, SampleData.dameStreet, SampleData.abbeyStreet, SampleData.taraStreet].compactMap { stop in
+            SampleData.stopDepartures(for: stop.id).map { (stop.id, $0) }
+        })
+    private var error: Error?
+    private var held: Set<String> = []
+    private var waiting: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private(set) var stopIds: [String] = [] {
+        didSet { callCountBox.value = stopIds.count }
+    }
+    /// `stopIds.count`, readable without awaiting.
+    nonisolated var callCount: Int { callCountBox.value }
+    private nonisolated let callCountBox = AtomicInt()
+
+    func setResponse(_ response: StopDepartures?, for stopId: String) { responses[stopId] = response }
+    func setError(_ error: Error?) { self.error = error }
+
+    /// Holds the next call for `stopId` until `release(_:)`. One call only.
+    func hold(_ stopId: String) { held.insert(stopId) }
+
+    /// Lets the held call(s) for `stopId` return the answer they decided on.
+    func release(_ stopId: String) {
+        for continuation in waiting.removeValue(forKey: stopId) ?? [] { continuation.resume() }
+    }
+
+    func fetchDepartures(stopId: String) async throws -> StopDepartures {
+        stopIds.append(stopId)
+        // Decide the answer before holding: a later setResponse must not
+        // change an answer already in flight.
+        let (response, error) = (responses[stopId], self.error)
+        if held.remove(stopId) != nil {
+            await withCheckedContinuation { waiting[stopId, default: []].append($0) }
+        }
+        if let error { throw error }
+        guard let response else { throw TurasServerError.httpError(statusCode: 404) }
+        return response
+    }
+}
+
+/// A scripted StationSource: SampleData's stations per rail mode, 400 for
+/// bus (as the server), or the scripted error. Counts calls by mode.
+actor FakeStationSource: StationSource {
+    private var stations: [TransportMode: [Station]] = [.luas: SampleData.stations(mode: .luas), .train: SampleData.stations(mode: .train)]
+    private var error: Error?
+    private(set) var modes: [TransportMode] = [] {
+        didSet { callCountBox.value = modes.count }
+    }
+    /// `modes.count`, readable without awaiting.
+    nonisolated var callCount: Int { callCountBox.value }
+    private nonisolated let callCountBox = AtomicInt()
+
+    func setStations(_ stations: [Station], for mode: TransportMode) { self.stations[mode] = stations }
+    func setError(_ error: Error?) { self.error = error }
+
+    func fetchStations(mode: TransportMode) async throws -> [Station] {
+        modes.append(mode)
+        if let error { throw error }
+        guard mode != .bus else { throw TurasServerError.httpError(statusCode: 400) }
+        return stations[mode] ?? []
     }
 }
 

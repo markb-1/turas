@@ -113,6 +113,24 @@ actor TurasServerService {
         return try ServerJSON.decoder.decode(SearchResponse.self, from: data)
     }
 
+    /// Fetches everything leaving one stop: the rows of the stop view.
+    /// 404 means the stop is not in the timetable.
+    func fetchDepartures(stopId: String) async throws -> StopDepartures {
+        let data = try await get("/api/v1/departures", query: [
+            URLQueryItem(name: "stop_id", value: stopId),
+        ])
+        return try ServerJSON.decoder.decode(StopDepartures.self, from: data)
+    }
+
+    /// Fetches every station of a mode for the map pins. The server
+    /// answers 400 for bus (~10,000 stops; the app uses /nearby instead).
+    func fetchStations(mode: TransportMode) async throws -> [Station] {
+        let data = try await get("/api/v1/stations", query: [
+            URLQueryItem(name: "mode", value: mode.rawValue),
+        ])
+        return try ServerJSON.decoder.decode([Station]?.self, from: data) ?? []
+    }
+
     // MARK: - Private
 
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
@@ -183,7 +201,17 @@ protocol FocusSource: Sendable {
     func fetchLuasArrivals(stopId: String, direction: Int, routeName: String) async throws -> [StopArrival]
 }
 
-extension TurasServerService: NearbySource, SearchSource, FocusSource {}
+/// Where StopModel gets a stop's departures.
+protocol StopSource: Sendable {
+    func fetchDepartures(stopId: String) async throws -> StopDepartures
+}
+
+/// Where StationStore gets the Luas and train station lists.
+protocol StationSource: Sendable {
+    func fetchStations(mode: TransportMode) async throws -> [Station]
+}
+
+extension TurasServerService: NearbySource, SearchSource, FocusSource, StopSource, StationSource {}
 
 // MARK: - Server JSON Models
 

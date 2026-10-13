@@ -125,13 +125,60 @@ final class TurasServerServiceTests: XCTestCase {
         XCTAssertEqual(url.query, "q=39", "no mode parameter when none is given")
     }
 
+    func testFetchDeparturesQueryAndDecoding() async throws {
+        StubURLProtocol.stub.set(body: Data("""
+        {"stop": {"id": "8220DB000400", "name": "College Green", "code": "400", "lat": 53.3441, "lon": -6.2595, "modes": ["bus"]},
+         "departures": [{"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 0,
+                         "times": [{"trip_id": "t1", "at": "2026-10-12T18:52:00Z", "delay": 0, "source": "live", "cancelled": false}]}]}
+        """.utf8))
+
+        let response = try await makeService().fetchDepartures(stopId: "8220DB000400")
+
+        XCTAssertEqual(response.stop.code, "400")
+        XCTAssertEqual(response.departures.map(\.route), ["39A"])
+        let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
+        XCTAssertEqual(url.path, "/api/v1/departures")
+        XCTAssertEqual(url.query, "stop_id=8220DB000400")
+        let request = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "test-key")
+    }
+
+    func testFetchDepartures404IsReported() async throws {
+        StubURLProtocol.stub.set(statusCode: 404, body: Data(#"{"error": "unknown stop"}"#.utf8))
+        do {
+            _ = try await makeService().fetchDepartures(stopId: "nope")
+            XCTFail("expected an error")
+        } catch let error as TurasServerError {
+            XCTAssertEqual(error, .httpError(statusCode: 404))
+        }
+    }
+
+    func testFetchStationsQueryAndNullBody() async throws {
+        StubURLProtocol.stub.set(body: Data(#"[{"id": "8250GA00286", "name": "Dawson", "lat": 53.3402, "lon": -6.2588}]"#.utf8))
+        let service = makeService()
+
+        let stations = try await service.fetchStations(mode: .luas)
+        XCTAssertEqual(stations.map(\.id), ["8250GA00286"])
+        let url = try XCTUnwrap(StubURLProtocol.stub.recordedRequests.first?.url)
+        XCTAssertEqual(url.path, "/api/v1/stations")
+        XCTAssertEqual(url.query, "mode=luas")
+
+        StubURLProtocol.stub.set(body: Data("null".utf8))
+        let none = try await service.fetchStations(mode: .train)
+        XCTAssertEqual(none, [])
+    }
+
     func testSourceProtocolsAreSatisfiedByTheService() {
         let service = makeService()
         let nearby: NearbySource = service
         let search: SearchSource = service
         let focus: FocusSource = service
+        let stop: StopSource = service
+        let stations: StationSource = service
         XCTAssertTrue(nearby is TurasServerService)
         XCTAssertTrue(search is TurasServerService)
         XCTAssertTrue(focus is TurasServerService)
+        XCTAssertTrue(stop is TurasServerService)
+        XCTAssertTrue(stations is TurasServerService)
     }
 }
