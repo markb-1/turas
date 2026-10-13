@@ -28,7 +28,7 @@ struct StopView: View {
                             .accessibilityIdentifier("stop.row.\(departure.id)")
                         }
                     }
-                    if let lastUpdated = stop.lastUpdated {
+                    if let lastUpdated = stop.lastUpdated, Self.showsUpdatedFooter(for: stop.status) {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             Text(ArrivalFormatting.updatedText(since: lastUpdated, now: context.date))
                                 .font(.caption)
@@ -43,6 +43,15 @@ struct StopView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("stop.panel")
+    }
+
+    /// The "Updated N min ago" footer. A failed refresh's banner already
+    /// says it, and a stop that left the timetable has no rows to date.
+    static func showsUpdatedFooter(for status: StopModel.Status) -> Bool {
+        switch status {
+        case .failed, .gone: return false
+        case .loading, .loaded, .empty, .starting: return true
+        }
     }
 
     private var header: some View {

@@ -96,6 +96,14 @@ final class ComponentRenderTests: XCTestCase {
         render(HomeView(model: model))
     }
 
+    func testStopViewFooterHidesWhenTheBannerSpeaksForTheRows() {
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .loaded))
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .empty))
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .starting))
+        XCTAssertFalse(StopView.showsUpdatedFooter(for: .failed(message: "x")), "the banner already says \"Updated N min ago\"")
+        XCTAssertFalse(StopView.showsUpdatedFooter(for: .gone), "no update time under \"no longer in the timetable\"")
+    }
+
     func testStopSubtitleShowsModesAndDistanceFromCentre() {
         let centre = CLLocationCoordinate2D(latitude: 53.3400, longitude: -6.2600)
         let near = StopSearchResult(id: "a", name: "Dun Laoghaire SC", lat: 53.3409, lon: -6.2600, modes: [.bus])
