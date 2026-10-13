@@ -359,7 +359,8 @@ final class HomeModel: ObservableObject {
 
     /// A pin or a stop result: the stop view, centred on the stop at the
     /// user's zoom (or `span`). From the stop view, another stop replaces
-    /// it; the same stop is a no-op.
+    /// it; the same stop (ID and mode: search and pins can differ in name
+    /// and coordinates) is a no-op.
     func openStop(_ target: StopTarget, span: MKCoordinateSpan? = nil) {
         if case .search = screen {
             search.clear()
@@ -377,7 +378,7 @@ final class HomeModel: ObservableObject {
             }
         }
         if let stop {
-            guard stop.target != target else { return }
+            guard stop.target.id != target.id || stop.target.mode != target.mode else { return }
             // Replacing a stop: the saved timeline camera still stands.
             stop.stop()
             stopCancellable = nil

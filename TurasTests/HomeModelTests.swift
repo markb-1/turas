@@ -464,6 +464,25 @@ final class HomeModelTests: XCTestCase {
         XCTAssertEqual(calls.last?.lat, collegeGreen.latitude)
     }
 
+    func testPinOfTheStopOpenedBySearchKeepsTheStopView() async throws {
+        let model = makeModel()
+        await loadTimeline(model)
+        model.beginSearch()
+        // Search can name and place a stop slightly differently from its pin.
+        let dame = SampleData.dameStreet
+        model.selectStopResult(StopSearchResult(id: dame.id, name: "Dame St", lat: dame.lat + 0.0001, lon: dame.lon, modes: [.bus]))
+        await waitUntil("stop polling") { model.stop?.status == .loaded && self.clock.sleeperCount == 1 }
+        let stop = try XCTUnwrap(model.stop)
+
+        model.openStop(dameStreetStop)
+        XCTAssertTrue(model.stop === stop, "the open stop's pin changes nothing")
+        XCTAssertEqual(stopSource.callCount, 1)
+
+        model.openStop(StopTarget(dame, mode: .luas))
+        XCTAssertFalse(model.stop === stop, "the same stop as another mode is another stop view")
+        model.closeStop()
+    }
+
     func testRowInStopViewOpensFocusAndBackReturnsToTheStopThenTheTimeline() async throws {
         let model = makeModel()
         model.cameraPosition = .automatic
