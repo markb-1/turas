@@ -1,0 +1,61 @@
+{
+  "stop": {
+    "id": "8220DB000400",
+    "name": "College Green",
+    "code": "400",
+    "lat": 53.3441,
+    "lon": -6.2595,
+    "modes": [
+      "bus"
+    ]
+  },
+  "departures": [
+    {
+      "route": "39A",
+      "agency_id": "5249",
+      "direction": 0,
+      "headsign": "Ongar",
+      "stop_id": "8220DB000400",
+      "distance_m": 0,
+      "times": [
+        {
+          "trip_id": "5913_56733",
+          "at": "2026-10-10T11:02:00Z",
+          "delay": 120,
+          "source": "live",
+          "cancelled": false
+        },
+        {
+          "trip_id": "5913_56734",
+          "at": "2026-10-10T11:14:00Z",
+          "delay": 0,
+          "source": "realtime",
+          "cancelled": false
+        },
+        {
+          "trip_id": "5913_56735",
+          "at": "2026-10-10T11:27:00Z",
+          "delay": 0,
+          "source": "timetable",
+          "cancelled": true
+        }
+      ]
+    },
+    {
+      "route": "15",
+      "agency_id": "5249",
+      "direction": 1,
+      "stop_id": "8220DB000400",
+      "distance_m": 0,
+      "times": [
+        {
+          "trip_id": "5913_56801",
+          "at": "2026-10-10T11:05:00Z",
+          "delay": 0,
+          "source": "timetable",
+          "cancelled": false
+        }
+      ]
+    }
+  ]
+}
