@@ -366,8 +366,10 @@ final class HomeModel: ObservableObject {
     }
 
     /// Back chevron or swipe down on the stop view: the timeline, as it was.
+    /// Focus open over the stop view closes with it.
     func closeStop() {
         guard let stop else { return }
+        endFocus()
         stop.stop()
         stopCancellable = nil
         self.stop = nil

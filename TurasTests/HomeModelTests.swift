@@ -441,6 +441,9 @@ final class HomeModelTests: XCTestCase {
         let elsewhere = CLLocationCoordinate2D(latitude: 53.30, longitude: -6.20)
         let close = MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
         model.mapCameraSettled(centre: elsewhere, span: close)
+        await drain()
+        // NearbyModel's pause also blocks a settle timer; HomeModel's `.stop` return is defence in depth.
+        XCTAssertEqual(clock.sleeperCount, 1, "only the stop view's loop sleeps: no settle timer for the timeline")
         clock.advance(by: 0.6)
         await drain()
         XCTAssertEqual(nearbySource.callCount, 1, "moving the map in the stop view never refetches the timeline")
@@ -616,6 +619,30 @@ final class HomeModelTests: XCTestCase {
         await waitUntil("nearby resumed") { self.nearbySource.callCount == 2 }
         await drain()
         XCTAssertEqual(stopSource.callCount, 1, "the closed stop view did not resume on the way out")
+    }
+
+    func testClosingTheStopViewUnderFocusClosesFocusToo() async throws {
+        let model = makeModel()
+        await loadTimeline(model)
+        await openStop(model, collegeGreenStop)
+        let row = try XCTUnwrap(model.stop?.departures.first)
+        model.openFocus(departure: row)
+        await waitUntil("focus polling") { self.focusSource.arrivalFetchCount == 1 }
+        await waitUntil("only focus sleeps") { self.clock.sleeperCount == 1 }
+
+        model.closeStop()
+        XCTAssertEqual(model.screen, .timeline)
+        XCTAssertNil(model.focus, "never on the timeline with focus still open")
+        XCTAssertNil(model.stop)
+        assertCentre(model.cameraPosition, is: collegeGreen, "the camera saved when the stop view opened")
+        await waitUntil("nearby resumed") { self.nearbySource.callCount == 2 }
+        await waitUntil("only the timeline sleeps") { self.clock.sleeperCount == 1 }
+        clock.advance(by: 30)
+        await waitUntil { self.nearbySource.callCount == 3 }
+        await waitUntil { self.clock.sleeperCount == 1 }
+        await drain()
+        XCTAssertEqual(focusSource.arrivalFetchCount, 1, "the closed focus stopped polling")
+        XCTAssertEqual(stopSource.callCount, 1, "the closed stop view did not resume")
     }
 
     func testStopOpenedOverFocusFromTheTimelineClosesFocus() async throws {
