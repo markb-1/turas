@@ -96,6 +96,7 @@ final class AppDependencies {
     func makeHomeModel() -> HomeModel {
         let nearby = NearbyModel(source: serverService)
         let search = SearchModel(source: serverService, places: placeSearch)
+        let stations = StationStore(source: serverService)
         let serverService = serverService
         let staticData = staticData
         let routeShapeService = routeShapeService
@@ -109,11 +110,13 @@ final class AppDependencies {
         let refreshRoutes: HomeModel.RouteRefresh = {
             await staticData.refreshRoutesIfStale()
         }
-        return HomeModel(nearby: nearby, search: search, location: locationService, refreshRoutes: refreshRoutes) { target, centre, userLocation in
+        return HomeModel(nearby: nearby, search: search, stations: stations, location: locationService, refreshRoutes: refreshRoutes, makeFocus: { target, centre, userLocation in
             RouteFocusModel(
                 target: target, centre: centre, userLocation: userLocation,
                 source: serverService, staticData: staticData, shapes: routeShapeService
             )
-        }
+        }, makeStop: { target, userLocation in
+            StopModel(target: target, userLocation: userLocation, source: serverService)
+        })
     }
 }

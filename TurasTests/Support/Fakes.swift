@@ -241,8 +241,8 @@ actor FakeFocusSource: FocusSource {
 /// To test a stale answer, hold a stop's answer back: `hold(stopId)` makes
 /// the next `fetchDepartures` for that stop record its call, then suspend
 /// (with its answer already decided) until `release(stopId)`. Wait for
-/// `callCount` to include the held call, switch stops, then release.
-/// Without `hold` every call answers immediately.
+/// `callCount` to include the held call, switch stops, then release and
+/// wait for `answerCount`. Without `hold` every call answers immediately.
 actor FakeStopSource: StopSource {
     private var responses: [String: StopDepartures] = Dictionary(uniqueKeysWithValues:
         [SampleData.collegeGreen, SampleData.dameStreet, SampleData.abbeyStreet, SampleData.taraStreet].compactMap { stop in
@@ -257,6 +257,9 @@ actor FakeStopSource: StopSource {
     /// `stopIds.count`, readable without awaiting.
     nonisolated var callCount: Int { callCountBox.value }
     private nonisolated let callCountBox = AtomicInt()
+    /// Calls that have returned or thrown, readable without awaiting.
+    nonisolated var answerCount: Int { answerCountBox.value }
+    private nonisolated let answerCountBox = AtomicInt()
 
     func setResponse(_ response: StopDepartures?, for stopId: String) { responses[stopId] = response }
     func setError(_ error: Error?) { self.error = error }
@@ -265,7 +268,9 @@ actor FakeStopSource: StopSource {
     func hold(_ stopId: String) { held.insert(stopId) }
 
     /// Lets the held call(s) for `stopId` return the answer they decided on.
+    /// Before the call is made, it cancels the hold instead.
     func release(_ stopId: String) {
+        held.remove(stopId)
         for continuation in waiting.removeValue(forKey: stopId) ?? [] { continuation.resume() }
     }
 
@@ -277,6 +282,7 @@ actor FakeStopSource: StopSource {
         if held.remove(stopId) != nil {
             await withCheckedContinuation { waiting[stopId, default: []].append($0) }
         }
+        answerCountBox.value += 1
         if let error { throw error }
         guard let response else { throw TurasServerError.httpError(statusCode: 404) }
         return response

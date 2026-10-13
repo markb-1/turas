@@ -31,4 +31,25 @@ final class FakeStopSourceTests: XCTestCase {
         let stopIds = await source.stopIds
         XCTAssertEqual(stopIds, [SampleData.collegeGreen.id, SampleData.dameStreet.id, SampleData.collegeGreen.id])
     }
+
+    func testReleaseBeforeTheCallDisarmsTheHoldAndAnswersAreCounted() async throws {
+        let source = FakeStopSource()
+        await source.hold(SampleData.collegeGreen.id)
+        await source.release(SampleData.collegeGreen.id) // nothing waiting yet
+
+        let answer = try await source.fetchDepartures(stopId: SampleData.collegeGreen.id)
+        XCTAssertEqual(answer.stop.name, "College Green", "a released hold does not catch the next call")
+        XCTAssertEqual(source.answerCount, 1)
+
+        _ = try? await source.fetchDepartures(stopId: "unknown")
+        XCTAssertEqual(source.answerCount, 2, "a thrown 404 counts as an answer")
+
+        await source.hold(SampleData.dameStreet.id)
+        let held = Task { try await source.fetchDepartures(stopId: SampleData.dameStreet.id) }
+        await waitUntil("held call made") { source.callCount == 3 }
+        XCTAssertEqual(source.answerCount, 2, "a held call has not answered")
+        await source.release(SampleData.dameStreet.id)
+        _ = try await held.value
+        XCTAssertEqual(source.answerCount, 3)
+    }
 }

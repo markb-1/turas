@@ -76,10 +76,12 @@ final class ComponentRenderTests: XCTestCase {
         let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
         let store = StaticDataStore(source: EmptyStaticSource(), bundledStops: RouteStopService(stopsByRoute: [:]), cacheDirectory: nil, bundledRoutes: { [:] })
-        let model = HomeModel(nearby: nearby, search: search, location: RenderLocation()) { target, centre, userLocation in
+        let model = HomeModel(nearby: nearby, search: search, stations: StationStore(source: FakeStationSource()), location: RenderLocation(), makeFocus: { target, centre, userLocation in
             RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: FakeFocusSource(),
                             staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
-        }
+        }, makeStop: { target, userLocation in
+            StopModel(target: target, userLocation: userLocation, source: FakeStopSource(), clock: clock.appClock)
+        })
         render(HomeView(model: model))
     }
 

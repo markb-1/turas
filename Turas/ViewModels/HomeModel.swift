@@ -5,19 +5,21 @@ import MapKit
 import SwiftUI
 
 /// The home screen: which panel is showing, the mode, the map camera and
-/// the user's location. Rows, search results and route focus live in the
-/// child models; this one wires the transitions between them.
+/// the user's location. Rows, search results, the stop view and route
+/// focus live in the child models; this one wires the transitions.
 ///
 /// The timeline follows the map: the view reports where the camera
-/// settled and `NearbyModel` fetches for it. Opening route focus pauses
-/// the timeline and moves the camera to the route; closing it puts the
-/// camera back on the place the rows were fetched for, so the rows and
-/// scroll position stay intact and the resumed fetch matches the map.
+/// settled and `NearbyModel` fetches for it. Opening the stop view or
+/// route focus pauses the timeline and saves the camera; closing the
+/// last of them puts the camera back on the place the rows were fetched
+/// for, so the rows and scroll position stay intact and the resumed
+/// fetch matches the map. Focus opened from the stop view returns to it.
 @MainActor
 final class HomeModel: ObservableObject {
     enum Screen: Equatable {
         case timeline
         case search
+        case stop(StopTarget)
         case focus(RouteFocusTarget)
     }
 
@@ -32,7 +34,17 @@ final class HomeModel: ObservableObject {
         case off
     }
 
+    /// A pin as the map draws it.
+    struct MapPin: Identifiable, Equatable {
+        let target: StopTarget
+        let isHighlighted: Bool
+
+        var id: String { target.id }
+    }
+
     typealias FocusFactory = @MainActor (RouteFocusTarget, CLLocationCoordinate2D, CLLocationCoordinate2D?) -> RouteFocusModel
+    /// Makes the stop view's model for a stop and the user's location.
+    typealias StopFactory = @MainActor (StopTarget, CLLocationCoordinate2D?) -> StopModel
     /// Re-fetches stale route lists (StaticDataStore.refreshRoutesIfStale).
     typealias RouteRefresh = @Sendable () async -> Void
 
@@ -47,33 +59,50 @@ final class HomeModel: ObservableObject {
     /// Where the camera last settled.
     @Published private(set) var centre: CLLocationCoordinate2D = HomeModel.cityCentre
     @Published private(set) var focus: RouteFocusModel?
+    /// The stop view's model. It stays while route focus is open over the
+    /// stop view, which is how closing focus knows to return there.
+    @Published private(set) var stop: StopModel?
 
     let nearby: NearbyModel
     let search: SearchModel
+    let stations: StationStore
 
     private let location: LocationProviding
     private let makeFocus: FocusFactory
+    private let makeStop: StopFactory
     private let refreshRoutes: RouteRefresh?
     private var routeRefreshTask: Task<Void, Never>?
     /// The span the camera last settled at, when the view reports it. Once
     /// the user moves the map, `cameraPosition` no longer holds a region.
     private var settledSpan: MKCoordinateSpan?
-    /// Where closing route focus puts the camera.
+    /// Where closing the stop view or route focus puts the camera.
     private var timelineRegion: MKCoordinateRegion?
     private var hasAppeared = false
     private var isLocating = false
     private var cancellables: Set<AnyCancellable> = []
     private var focusCancellable: AnyCancellable?
+    private var stopCancellable: AnyCancellable?
 
-    init(nearby: NearbyModel, search: SearchModel, location: LocationProviding, refreshRoutes: RouteRefresh? = nil, makeFocus: @escaping FocusFactory) {
+    init(
+        nearby: NearbyModel,
+        search: SearchModel,
+        stations: StationStore,
+        location: LocationProviding,
+        refreshRoutes: RouteRefresh? = nil,
+        makeFocus: @escaping FocusFactory,
+        makeStop: @escaping StopFactory
+    ) {
         self.nearby = nearby
         self.search = search
+        self.stations = stations
         self.location = location
         self.makeFocus = makeFocus
+        self.makeStop = makeStop
         self.refreshRoutes = refreshRoutes
         // Views observe this model; forward the children's changes.
         nearby.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         search.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        stations.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         location.authorizationStatusPublisher
             .removeDuplicates()
             .dropFirst()
@@ -109,12 +138,38 @@ final class HomeModel: ObservableObject {
     /// A route-list refresh is running.
     var isRefreshingRoutes: Bool { routeRefreshTask != nil }
 
+    /// The pins for the current mode: every bus stop `/nearby` returned
+    /// (within 300 m of the centre), or every station of the mode once
+    /// `/stations` has answered, with `/nearby`'s stops until then.
+    var pins: [StopTarget] {
+        if mode != .bus, let stations = stations.stations(for: mode) {
+            return stations.map { StopTarget($0, mode: mode) }
+        }
+        return nearby.stops.map { StopTarget($0, mode: mode) }
+    }
+
+    /// The pins to draw: `pins`, with the stop view's stop highlighted and
+    /// added when it is not among them (a stop result can lie outside the
+    /// pins fetched for the timeline's place).
+    var mapPins: [MapPin] {
+        let pins = pins
+        guard case .stop(let target) = screen else {
+            return pins.map { MapPin(target: $0, isHighlighted: false) }
+        }
+        var drawn = pins.map { MapPin(target: $0, isHighlighted: $0.id == target.id) }
+        if !pins.contains(where: { $0.id == target.id }) {
+            drawn.append(MapPin(target: target, isHighlighted: true))
+        }
+        return drawn
+    }
+
     // MARK: - Lifecycle
 
     func onAppear() {
         guard !hasAppeared else { return }
         hasAppeared = true
         refreshRouteListsIfStale()
+        stations.load(mode)
         switch location.authorizationStatus {
         case .notDetermined:
             locationState = .undecided
@@ -130,10 +185,13 @@ final class HomeModel: ObservableObject {
             refreshRouteListsIfStale()
         }
         focus?.scenePhaseChanged(to: phase)
-        if case .focus = screen {
-            return // The timeline stays paused while focus is open.
+        stop?.scenePhaseChanged(to: phase)
+        switch screen {
+        case .focus, .stop:
+            return // The timeline stays paused under them.
+        case .timeline, .search:
+            nearby.scenePhaseChanged(to: phase)
         }
-        nearby.scenePhaseChanged(to: phase)
     }
 
     /// Route lists older than 7 days are re-fetched at launch and when the
@@ -147,13 +205,14 @@ final class HomeModel: ObservableObject {
     }
 
     /// The map camera stopped moving. In route focus the camera follows the
-    /// route, not the user, so the timeline is left alone.
+    /// route, and in the stop view the stop, so the timeline is left alone.
     func mapCameraSettled(centre: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil) {
         self.centre = centre
         if case .focus = screen { return }
         if let span {
             settledSpan = span
         }
+        if case .stop = screen { return }
         nearby.cameraSettled(at: centre)
     }
 
@@ -222,20 +281,21 @@ final class HomeModel: ObservableObject {
         self.mode = mode
         nearby.setMode(mode)
         search.setMode(mode)
+        stations.load(mode)
     }
 
     // MARK: - Search
 
     /// The search field took focus. It shows in every state, so from route
-    /// focus the timeline comes back first and search opens over it.
+    /// focus or the stop view the timeline comes back first and search
+    /// opens over it.
     func beginSearch() {
-        switch screen {
-        case .timeline:
-            break
-        case .focus:
-            closeFocus()
-        case .search:
-            return
+        if case .search = screen { return }
+        if case .focus = screen {
+            closeFocus() // lands on the stop view when focus came from it
+        }
+        if case .stop = screen {
+            closeStop()
         }
         screen = .search
     }
@@ -247,9 +307,9 @@ final class HomeModel: ObservableObject {
         }
     }
 
-    /// A stop result: fly there; the timeline then follows the map.
+    /// A stop result: the stop view for that stop, as the stop's mode.
     func selectStopResult(_ stop: StopSearchResult) {
-        fly(to: stop.coordinate)
+        openStop(StopTarget(stop, preferring: mode), span: Self.homeSpan)
     }
 
     func selectPlaceResult(_ place: PlaceResult) {
@@ -259,7 +319,7 @@ final class HomeModel: ObservableObject {
     /// A route result: focus, outbound, at the stop nearest the map centre.
     func selectRouteResult(_ route: RouteSearchResult) {
         search.clear()
-        openFocus(RouteFocusTarget(route: route.ref, mode: route.mode, direction: 0, headsign: route.headsign(for: 0), stop: nil))
+        openFocus(RouteFocusTarget(route: route.ref, mode: route.mode, direction: 0, headsign: route.headsign(for: 0), stop: nil), centre: centre)
     }
 
     private func fly(to coordinate: CLLocationCoordinate2D) {
@@ -268,26 +328,78 @@ final class HomeModel: ObservableObject {
         cameraPosition = .region(MKCoordinateRegion(center: coordinate, span: Self.homeSpan))
     }
 
-    // MARK: - Route focus
+    // MARK: - Stop view
 
-    /// A timeline row: focus on its route, direction and stop.
-    func openFocus(departure: NearbyDeparture) {
-        let stop = nearby.result?.stop(withId: departure.stopId).map(FocusStop.init)
-        openFocus(RouteFocusTarget(route: departure.routeRef, mode: mode, direction: departure.direction, headsign: departure.headsign, stop: stop))
+    /// A pin or a stop result: the stop view, centred on the stop at the
+    /// user's zoom (or `span`). From the stop view, another stop replaces
+    /// it; the same stop is a no-op.
+    func openStop(_ target: StopTarget, span: MKCoordinateSpan? = nil) {
+        if case .search = screen {
+            search.clear()
+        }
+        let isTimelinePaused = focus != nil || stop != nil
+        if focus != nil {
+            // Not reachable from the map in focus; keeps the state machine
+            // total. Over a stop view, close focus as back does (the same
+            // stop is then a no-op, another replaces it); over the timeline,
+            // the timeline stays paused with its camera saved.
+            if stop != nil {
+                closeFocus()
+            } else {
+                endFocus()
+            }
+        }
+        if let stop {
+            guard stop.target != target else { return }
+            // Replacing a stop: the saved timeline camera still stands.
+            stop.stop()
+            stopCancellable = nil
+        } else if !isTimelinePaused {
+            leaveTimeline()
+        }
+        let model = makeStop(target, location.userLocation)
+        stopCancellable = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        stop = model
+        screen = .stop(target)
+        cameraPosition = .region(MKCoordinateRegion(center: target.coordinate, span: span ?? settledSpan ?? Self.homeSpan))
+        Task { await model.start() }
     }
 
-    private func openFocus(_ target: RouteFocusTarget) {
-        if let focus {
-            // Replacing a focus: the saved timeline camera still stands.
-            focus.stop()
+    /// Back chevron or swipe down on the stop view: the timeline, as it was.
+    func closeStop() {
+        guard let stop else { return }
+        stop.stop()
+        stopCancellable = nil
+        self.stop = nil
+        returnToTimeline()
+    }
+
+    // MARK: - Route focus
+
+    /// A timeline or stop view row: focus on its route, direction and stop.
+    func openFocus(departure: NearbyDeparture) {
+        if let stop {
+            let target = RouteFocusTarget(route: departure.routeRef, mode: stop.target.mode, direction: departure.direction,
+                                          headsign: departure.headsign, stop: stop.focusStop)
+            openFocus(target, centre: stop.target.coordinate)
         } else {
-            // The place the rows are for, so closing resumes a fetch for
-            // the place the map shows.
-            let span = settledSpan ?? cameraPosition.region?.span ?? Self.homeSpan
-            timelineRegion = MKCoordinateRegion(center: nearby.fetchedCentre ?? centre, span: span)
-            nearby.pause()
+            let focusStop = nearby.result?.stop(withId: departure.stopId).map(FocusStop.init)
+            openFocus(RouteFocusTarget(route: departure.routeRef, mode: mode, direction: departure.direction,
+                                       headsign: departure.headsign, stop: focusStop), centre: centre)
         }
-        let model = makeFocus(target, centre, location.userLocation)
+    }
+
+    private func openFocus(_ target: RouteFocusTarget, centre focusCentre: CLLocationCoordinate2D) {
+        if let focus {
+            // Replacing a focus: whatever is saved beneath it still stands.
+            focus.stop()
+        } else if let stop {
+            // Focus over the stop view: the stop waits, the timeline is already paused.
+            stop.pause()
+        } else {
+            leaveTimeline()
+        }
+        let model = makeFocus(target, focusCentre, location.userLocation)
         focusCancellable = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         focus = model
         screen = .focus(target)
@@ -298,18 +410,44 @@ final class HomeModel: ObservableObject {
         }
     }
 
-    /// Back chevron or swipe down: the timeline, as it was.
+    /// Back chevron or swipe down: the stop view when focus came from it,
+    /// else the timeline, as it was.
     func closeFocus() {
-        guard let focus else { return }
-        focus.stop()
+        guard focus != nil else { return }
+        endFocus()
+        if let stop {
+            screen = .stop(stop.target)
+            cameraPosition = .region(MKCoordinateRegion(center: stop.target.coordinate, span: settledSpan ?? Self.homeSpan))
+            stop.resume()
+            return
+        }
+        returnToTimeline()
+    }
+
+    private func endFocus() {
+        focus?.stop()
         focusCancellable = nil
-        self.focus = nil
+        focus = nil
+    }
+
+    // MARK: - Timeline camera
+
+    /// Leaving the timeline for the stop view or focus: remember the place
+    /// the rows are for, so coming back resumes a fetch for the place the
+    /// map shows.
+    private func leaveTimeline() {
+        let span = settledSpan ?? cameraPosition.region?.span ?? Self.homeSpan
+        timelineRegion = MKCoordinateRegion(center: nearby.fetchedCentre ?? centre, span: span)
+        nearby.pause()
+    }
+
+    private func returnToTimeline() {
         screen = .timeline
         nearby.resume()
         if let timelineRegion {
             cameraPosition = .region(timelineRegion)
-            // A no-op when the rows are for this place; otherwise (focus
-            // opened before the first fetch) the timeline fetches here.
+            // A no-op when the rows are for this place; otherwise (opened
+            // before the first fetch) the timeline fetches here.
             nearby.cameraSettled(at: timelineRegion.center)
         }
         timelineRegion = nil
