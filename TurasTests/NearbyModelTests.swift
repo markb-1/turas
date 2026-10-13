@@ -312,14 +312,6 @@ final class NearbyModelTests: XCTestCase {
         XCTAssertEqual(model.departures.map(\.route), ["Red"])
     }
 
-    func testFirstRowAtStop() async {
-        let source = FakeNearbySource()
-        let model = makeModel(source: source)
-        await loadFirst(model, source: source, at: collegeGreen)
-        XCTAssertEqual(model.firstRow(atStop: SampleData.dameStreet.id)?.route, "16")
-        XCTAssertNil(model.firstRow(atStop: "nope"))
-    }
-
     func testDistance() {
         XCTAssertEqual(NearbyModel.distance(collegeGreen, moved(50, from: collegeGreen)), 50, accuracy: 0.5)
     }

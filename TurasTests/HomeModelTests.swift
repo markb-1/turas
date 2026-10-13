@@ -205,15 +205,6 @@ final class HomeModelTests: XCTestCase {
         await waitUntil { model.nearby.departures.map(\.route) == ["DART"] }
     }
 
-    func testPinTapScrollsToTheStopsFirstRow() async {
-        let model = makeModel()
-        await loadTimeline(model)
-        model.selectPin(stopId: SampleData.dameStreet.id)
-        XCTAssertEqual(model.scrollToRow, "1|16|1")
-        model.selectPin(stopId: "unknown")
-        XCTAssertEqual(model.scrollToRow, "1|16|1", "an unknown pin changes nothing")
-    }
-
     func testScenePhaseForwardsToNearby() async {
         let model = makeModel()
         await loadTimeline(model)

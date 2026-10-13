@@ -57,11 +57,6 @@ final class NearbyModel: ObservableObject {
     /// Whether the settle timer is running (a fetch will follow).
     var hasPendingFetch: Bool { settleTask != nil }
 
-    /// The first row at a stop; tapping a pin scrolls to it.
-    func firstRow(atStop stopId: String) -> NearbyDeparture? {
-        departures.first { $0.stopId == stopId }
-    }
-
     // MARK: - Camera
 
     /// The map camera stopped at `centre`. Fetches 0.6 s later unless the

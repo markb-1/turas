@@ -86,11 +86,8 @@ struct HomeView: View {
                 ForEach(model.nearby.stops) { stop in
                     Annotation(stop.name, coordinate: stop.coordinate) {
                         StopPin(name: stop.name, showsLabel: showsPinLabels)
-                            .onTapGesture { model.selectPin(stopId: stop.id) }
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(AccessibilityText.stop(name: stop.name))
-                            .accessibilityHint("Scrolls the timeline to this stop")
-                            .accessibilityAddTraits(.isButton)
                             .accessibilityIdentifier("map.pin.\(stop.id)")
                     }
                     .annotationTitles(.hidden)
@@ -205,7 +202,6 @@ struct HomeView: View {
         DepartureTimeline(
             nearby: model.nearby,
             mode: model.mode,
-            scrollToRow: $model.scrollToRow,
             onSelect: { model.openFocus(departure: $0) },
             onRetry: model.nearby.retry
         )

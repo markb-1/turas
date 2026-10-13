@@ -47,9 +47,6 @@ final class HomeModel: ObservableObject {
     /// Where the camera last settled.
     @Published private(set) var centre: CLLocationCoordinate2D = HomeModel.cityCentre
     @Published private(set) var focus: RouteFocusModel?
-    /// A row id the timeline should scroll to (a pin was tapped); the view
-    /// clears it after scrolling.
-    @Published var scrollToRow: String?
 
     let nearby: NearbyModel
     let search: SearchModel
@@ -316,13 +313,5 @@ final class HomeModel: ObservableObject {
             nearby.cameraSettled(at: timelineRegion.center)
         }
         timelineRegion = nil
-    }
-
-    // MARK: - Pins
-
-    /// Tapping a pin scrolls the timeline to that stop's first row.
-    func selectPin(stopId: String) {
-        guard let row = nearby.firstRow(atStop: stopId) else { return }
-        scrollToRow = row.id
     }
 }

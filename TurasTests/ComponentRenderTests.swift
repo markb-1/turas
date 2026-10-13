@@ -42,10 +42,16 @@ final class ComponentRenderTests: XCTestCase {
         render(StatusBanner(kind: .progress, message: "Turas is starting up…"))
         render(BusAnnotationView(routeId: "DART", bearing: 90, mode: .train))
     }
+    func testTimelineEmptyMessageNamesTheRadius() {
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .bus), "Nothing leaving within 300 m in the next 90 min. Try another mode or move the map.")
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .luas), "Nothing leaving within 800 m in the next 90 min. Try another mode or move the map.")
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .train), "Nothing leaving within 800 m in the next 90 min. Try another mode or move the map.")
+    }
+
     func testPanelsRender() async {
         let clock = ManualClock()
         let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
-        render(DepartureTimeline(nearby: nearby, mode: .bus, scrollToRow: .constant(nil), onSelect: { _ in }, onRetry: {}))
+        render(DepartureTimeline(nearby: nearby, mode: .bus, onSelect: { _ in }, onRetry: {}))
 
         let centre = CLLocationCoordinate2D(latitude: 53.34, longitude: -6.26)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
