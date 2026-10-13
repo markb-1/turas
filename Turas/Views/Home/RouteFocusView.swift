@@ -6,6 +6,8 @@ import SwiftUI
 struct RouteFocusView: View {
     @ObservedObject var focus: RouteFocusModel
     let onBack: () -> Void
+    /// "Back to timeline", or "Back to stop" when focus came from the stop view.
+    var backLabel = "Back to timeline"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.cardSpacing) {
@@ -40,7 +42,7 @@ struct RouteFocusView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Back to timeline")
+            .accessibilityLabel(backLabel)
             .accessibilityIdentifier("focus.back")
 
             RouteBadge(route: focus.route.name, mode: focus.mode)

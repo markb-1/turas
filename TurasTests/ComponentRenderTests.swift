@@ -33,6 +33,9 @@ final class ComponentRenderTests: XCTestCase {
         render(TimeStack(times: [], now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now).dynamicTypeSize(.accessibility5))
+        render(DepartureCard(departure: departure, stopName: nil, mode: .bus, now: now, identifierPrefix: "stop.row"))
+        render(CentreMarker(isLifted: false))
+        render(CentreMarker(isLifted: true))
         render(StopPin(name: "College Green", showsLabel: true, isHighlighted: true))
         render(ModeTabs(selected: .luas, onSelect: { _ in }))
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: ManualClock().appClock)
@@ -62,6 +65,10 @@ final class ComponentRenderTests: XCTestCase {
         let focus = RouteFocusModel(target: target, centre: centre, userLocation: nil,
                                     source: FakeFocusSource(), staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
         render(RouteFocusView(focus: focus, onBack: {}))
+        let stop = StopModel(target: StopTarget(SampleData.collegeGreen, mode: .bus), userLocation: nil,
+                             source: FakeStopSource(), clock: clock.appClock)
+        render(StopView(stop: stop, onBack: {}, onSelect: { _ in }))
+        render(RouteFocusView(focus: focus, onBack: {}, backLabel: "Back to stop"))
     }
 
     func testHomeViewRenders() {

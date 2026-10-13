@@ -119,6 +119,15 @@ final class FormattingTests: XCTestCase {
             AccessibilityText.departure(noHeadsign, stopName: "Abbey Street", now: now),
             "Green to Direction 1 from Abbey Street, 40 metres. Live, 3 minutes."
         )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2), time(14), time(27)]), stopName: nil, now: now),
+            "39A to Ongar. Live, 2 minutes, then 14 and 27 minutes.",
+            "the stop view names the stop in its header, not on every row"
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([]), stopName: nil, now: now),
+            "39A to Ongar. No times."
+        )
     }
 
     // MARK: - Server errors

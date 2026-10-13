@@ -142,9 +142,14 @@ enum AccessibilityText {
     }
 
     /// One label per timeline row: "39A to Ongar from College Green, 90
-    /// metres. Live, 2 minutes, then 14 and 27 minutes."
-    static func departure(_ departure: NearbyDeparture, stopName: String, now: Date = Date()) -> String {
-        let label = "\(departure.route) to \(departure.destination) from \(stopName), \(distance(metres: departure.distanceM)). "
+    /// metres. Live, 2 minutes, then 14 and 27 minutes." Without a stop
+    /// name (the stop view's rows): "39A to Ongar. Live, 2 minutes, …"
+    static func departure(_ departure: NearbyDeparture, stopName: String?, now: Date = Date()) -> String {
+        var label = "\(departure.route) to \(departure.destination)"
+        if let stopName {
+            label += " from \(stopName), \(distance(metres: departure.distanceM))"
+        }
+        label += ". "
 
         guard let first = departure.times.first else {
             return label + "No times."
