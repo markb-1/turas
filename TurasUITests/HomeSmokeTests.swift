@@ -206,6 +206,9 @@ final class HomeSmokeTests: XCTestCase {
         pin(stubId: "8220DB000401").tap()
         XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
         XCTAssertTrue(element("stop.name").exists)
+        if !live {
+            XCTAssertEqual(element("stop.name").label, "Dame Street", "the header names the tapped stop")
+        }
         XCTAssertFalse(rows.firstMatch.exists, "the covered timeline is hidden from accessibility")
         let hasRows = waitForStopAnswer("the stop view lists departures")
         snapshot("stop-view")
@@ -216,6 +219,7 @@ final class HomeSmokeTests: XCTestCase {
             XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
             XCTAssertFalse(stopRows.firstMatch.exists, "the covered stop view is hidden too")
             snapshot("stop-focus")
+            XCTAssertEqual(app.buttons["focus.back"].label, "Back to stop")
             app.buttons["focus.back"].tap()
             XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
             XCTAssertFalse(element("focus.panel").exists)
@@ -237,6 +241,9 @@ final class HomeSmokeTests: XCTestCase {
         snapshot("timeline-luas-stations")
         station.tap()
         XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
+        if !live {
+            XCTAssertEqual(element("stop.name").label, "Abbey Street", "the header names the tapped station")
+        }
         _ = waitForStopAnswer("a Luas stop lists both directions")
         if !live {
             XCTAssertEqual(stopRows.count, 2, "Abbey Street lists both directions")
