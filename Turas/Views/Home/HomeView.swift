@@ -263,7 +263,7 @@ private struct HomeMap: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(AccessibilityText.stop(name: pin.target.name))
                 .accessibilityHint("Shows departures from this stop")
-                .accessibilityAddTraits(.isButton)
+                .accessibilityAddTraits(pin.isHighlighted ? [.isButton, .isSelected] : .isButton)
                 .accessibilityIdentifier("map.pin.\(pin.id)")
         }
         .annotationTitles(.hidden)

@@ -208,6 +208,8 @@ final class HomeSmokeTests: XCTestCase {
         XCTAssertTrue(element("stop.name").exists)
         if !live {
             XCTAssertEqual(element("stop.name").label, "Dame Street", "the header names the tapped stop")
+            XCTAssertTrue(element("map.pin.8220DB000401").isSelected, "VoiceOver hears the open stop's pin as selected")
+            XCTAssertFalse(element("map.pin.8220DB000400").isSelected, "and no other pin")
         }
         XCTAssertFalse(rows.firstMatch.exists, "the covered timeline is hidden from accessibility")
         let hasRows = waitForStopAnswer("the stop view lists departures")
