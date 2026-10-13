@@ -3,9 +3,10 @@ import Foundation
 
 /// What is leaving near a point, computed by the server (GET /api/v1/nearby).
 ///
-/// `stops` lists only the stops that `departures` reference; they become the
-/// map pins. Lists are `[]` on the wire, never null, but a missing or null
-/// list decodes as empty rather than failing the whole response.
+/// `stops` lists every stop of the mode within the mode's radius (300 m bus,
+/// 800 m Luas and train), nearest first; they become the bus map pins.
+/// Lists are `[]` on the wire, never null, but a missing or null list
+/// decodes as empty rather than failing the whole response.
 struct NearbyResponse: Decodable, Equatable, Sendable {
     let stops: [DepartureStop]
     let departures: [NearbyDeparture]

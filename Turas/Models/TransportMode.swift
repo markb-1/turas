@@ -31,4 +31,14 @@ enum TransportMode: String, CaseIterable, Identifiable, Codable, Sendable {
         case .train: return "train.side.front.car"
         }
     }
+
+    /// How far around the map centre the timeline looks, in metres: the
+    /// server's `/nearby` radius for the mode, drawn as the circle around
+    /// the centre marker.
+    var nearbyRadiusMetres: Double {
+        switch self {
+        case .bus: return 300
+        case .luas, .train: return 800
+        }
+    }
 }
