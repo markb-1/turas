@@ -95,7 +95,9 @@ or `.focus(RouteFocusTarget)`.
   the pins and the next selection of the mode fetches again. Bus never asks for stations.
 - Location: not determined shows the `PrimingCard` ("Allow location" / "Not now");
   denied, restricted or "Not now" centres on O'Connell Bridge with "Showing city
-  centre"; revoked while running keeps the map ("Location is off").
+  centre"; revoked while running keeps the map ("Location is off"). Returning to the
+  foreground with authorisation asks for a fresh fix; the stop view's distance (which
+  follows each new fix) and route focus's walking time use it only while authorised.
 - Errors keep the last rows with "Updated N min ago" and Retry; 503 shows "Turas is
   starting up…" and retries; 429 retries silently on the next tick.
 - Search stop rows show their modes and distance from the map centre ("Bus · 1.2 km"),
@@ -145,14 +147,15 @@ sends `x-api-key`. Dates are RFC 3339; the decoder accepts whole or fractional s
 | `fetchArrivals(stopId:route:direction:)` | `GET /api/v1/arrivals?stop_id=&route=&direction=[&agency=]` -> `[StopArrival]` |
 | `fetchLuasArrivals(stopId:direction:routeName:)` | `GET /api/v1/luas/arrivals?stop_id=&direction=&route=` |
 | `fetchNearby(lat:lon:mode:)` | `GET /api/v1/nearby?lat=&lon=&mode=` -> `{stops: [{id, name, lat, lon, distance_m}], departures: [{route, agency_id, direction, headsign?, stop_id, distance_m, times: [{trip_id, at, delay, source: live\|realtime\|timetable, cancelled}]}]}`; `stops` is every stop of the mode within the radius (300 m bus, 800 m Luas/train), nearest first, at most 30 |
-| `fetchDepartures(stopId:)` | `GET /api/v1/departures?stop_id=` -> `{stop: {id, name, code?, lat, lon, modes}, departures: [...]}` (rows as `/nearby`, `distance_m` 0, `stop_id` the requested stop; Luas: both platforms); 404 `unknown stop` |
+| `fetchDepartures(stopId:)` | `GET /api/v1/departures?stop_id=` -> `{stop: {id, name, code?, lat, lon, modes}, departures: [...]}` (rows as `/nearby`, `distance_m` 0, `stop_id` the requested stop; Luas: both platforms); 404 `unknown stop`; 502 for a Luas stop when every forecast call failed or it has no forecast code |
 | `fetchStations(mode:)` | `GET /api/v1/stations?mode=luas\|train` -> `[{id, name, lat, lon}]` (one per Luas stop, platforms merged into the lower stop ID); 400 for bus |
 | `search(query:mode:)` | `GET /api/v1/search?q=[&mode=]` -> `{stops: [{id, name, lat, lon, modes}], routes: [{name, agency_id, agency_name?, mode, headsign_outbound?, headsign_inbound?}]}` |
 
 Errors are `{"error": "..."}`. 401/403 means a bad key, 429 the per-client rate limit
 (10 req/s, burst 20), 503 that the server is still loading its schedule after a restart,
-502 (`/nearby?mode=luas`) that every Luas forecast call failed; `ServerErrorText.message`
-maps each to a message and the models keep their last good data and retry.
+502 (`/nearby?mode=luas`, `/departures` for a Luas stop) that the Luas forecasts are
+unavailable; `ServerErrorText.message` maps each to a message and the models keep their
+last good data and retry.
 
 ### Contract fixtures
 

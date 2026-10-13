@@ -119,7 +119,7 @@ Turas/
 │                             # FavouritesStore, bundled-data loaders
 ├── Theme.swift               # colour tokens, line colours, metrics
 ├── ViewModels/               # HomeModel, NearbyModel, SearchModel, StopModel, RouteFocusModel
-├── Views/                    # Home/ (map, timeline, search, route focus) and Components/
+├── Views/                    # Home/ (map, timeline, search, stop view, route focus) and Components/
 └── Resources/                # Bundled GTFS static JSON (stops, shapes, lookups)
 Supporting/                   # Info.plist and the ATS build-phase script
 TurasTests/                   # unit tests and contract fixtures
