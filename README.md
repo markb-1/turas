@@ -5,6 +5,7 @@ A real-time public transport tracker for iOS, covering bus, Luas, and rail servi
 ## Features
 
 - **What's leaving near you** — the timeline shows the next departures around the map centre, one row per route and direction from its nearest stop, with the next three times; drag the map and it follows
+- **Stop view** — tap any stop on the map (or a stop search result) to see everything leaving it, one row per route and direction with its next three times; a fixed centre marker and a 300 m (bus) or 800 m (Luas, train) circle show what the timeline is looking at
 - **Search** stops, routes and places (Apple Maps, Ireland only) from one box
 - **Route focus** — tap a row to see the route's line, its live vehicles and the next times at that stop; flip direction with ⇄
 - **Bus, Luas and Train** tabs
@@ -117,7 +118,7 @@ Turas/
 ├── Services/                 # TurasServerService, StaticDataStore, LocationService,
 │                             # FavouritesStore, bundled-data loaders
 ├── Theme.swift               # colour tokens, line colours, metrics
-├── ViewModels/               # HomeModel, NearbyModel, SearchModel, RouteFocusModel
+├── ViewModels/               # HomeModel, NearbyModel, SearchModel, StopModel, RouteFocusModel
 ├── Views/                    # Home/ (map, timeline, search, route focus) and Components/
 └── Resources/                # Bundled GTFS static JSON (stops, shapes, lookups)
 Supporting/                   # Info.plist and the ATS build-phase script

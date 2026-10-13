@@ -45,6 +45,7 @@ Turas/
   Formatting.swift          departure/arrival text, VoiceOver labels, error text (unit tested)
   Models/                   Vehicle, StopArrival, RouteStop, RouteShape, RouteRef, TransitRoute,
                             TransportMode, Nearby (NearbyResponse...), Search (SearchResponse...),
+                            Stop (Station, StopInfo, StopDepartures, StopTarget),
                             RouteLabelling (shared operatorLabel/headsign(for:) for
                             TransitRoute and RouteSearchResult)
   Services/
@@ -57,9 +58,10 @@ Turas/
     LocationService         @MainActor CLLocationManager wrapper; LocationProviding
     AppClock                now + sleep, injected into the models
     FavouritesStore         @MainActor recents and starred routes (no UI yet)
-  ViewModels/               HomeModel, NearbyModel, SearchModel, RouteFocusModel (all @MainActor)
-  Views/Home/               HomeView, DepartureTimeline, SearchResultsView, RouteFocusView
-  Views/Components/         RouteBadge, TimeStack, DepartureCard, StopPin, ModeTabs,
+    StationStore            @MainActor Luas and train station lists from /stations, one fetch per mode per session
+  ViewModels/               HomeModel, NearbyModel, SearchModel, StopModel, RouteFocusModel (all @MainActor)
+  Views/Home/               HomeView, DepartureTimeline, SearchResultsView, StopView, RouteFocusView
+  Views/Components/         RouteBadge, TimeStack, DepartureCard, StopPin, CentreMarker, ModeTabs,
                             SearchField, PrimingCard, StatusBanner
 TurasTests/                 XCTest unit tests; Fixtures/ holds the contract JSON;
                             Support/ has ManualClock, waitUntil and the fake sources
@@ -68,18 +70,29 @@ TurasUITests/               XCUITest smoke test (screenshots as attachments)
 
 ### Home screen
 
-`HomeModel.screen` is the single source of truth: `.timeline`, `.search` or
-`.focus(RouteFocusTarget)`.
+`HomeModel.screen` is the single source of truth: `.timeline`, `.search`, `.stop(StopTarget)`
+or `.focus(RouteFocusTarget)`.
 
 | State | Map shows | Bottom half | Polling |
 |---|---|---|---|
-| `.timeline` | pins from `/nearby`'s `stops` | mode tabs + rows sorted by first time | `/nearby` 30 s |
+| `.timeline` | a fixed centre marker (drawn in `Theme.ink`), a faint circle of the mode's radius (300 m bus, 800 m Luas/train), and pins from `HomeModel.mapPins`: bus stops from `/nearby`'s `stops`, Luas/train stations from `/stations` | mode tabs + rows sorted by first time | `/nearby` 30 s |
 | `.search` | unchanged | Stops / Routes / Places (8 each) | none (250 ms debounce) |
+| `.stop` | the same pins, centred on the stop with its pin highlighted (added if it is not among them); no marker or circle | stop name, "Stop 7602 · 240 m", one row per route and direction with its next 3 times (`StopModel`) | `/departures` 30 s |
 | `.focus` | one direction's bundled shape, its vehicles, the stop | route, destination, stop, next times, ⇄ | vehicles + arrivals 30 s |
 
 - The timeline follows the map: `HomeView` reports `onMapCameraChange(.onEnd)`, and
-  `NearbyModel` fetches 0.6 s later if the centre moved more than 50 m. Opening focus
-  pauses the timeline and saves the camera; closing restores both.
+  `NearbyModel` fetches 0.6 s later if the centre moved more than 50 m. The marker lifts
+  while the map moves (`.continuous`) and drops when it settles. Opening the stop view or
+  route focus pauses the timeline and saves the camera; closing the last of them restores both.
+- Tapping a pin or a stop search result opens the stop view (`HomeModel.openStop`); tapping
+  another pin switches stop. A stop view has one mode (the tab's, or the search result's own
+  mode when the tab's does not serve it; the tab is not changed). A row opens route focus
+  over the stop view (the stop model pauses); back returns to the stop view, back again to the
+  timeline. A 404 from `/departures` shows "This stop is no longer in the timetable" and ends
+  polling; an empty answer shows "Nothing leaving in the next 90 minutes".
+- Luas and train pins come from `StationStore` (`/stations`, fetched on the first selection of
+  the mode and kept for the session). While it loads or after it fails, `/nearby`'s stops are
+  the pins and the next selection of the mode fetches again. Bus never asks for stations.
 - Location: not determined shows the `PrimingCard` ("Allow location" / "Not now");
   denied, restricted or "Not now" centres on O'Connell Bridge with "Showing city
   centre"; revoked while running keeps the map ("Location is off").
@@ -131,7 +144,9 @@ sends `x-api-key`. Dates are RFC 3339; the decoder accepts whole or fractional s
 | `fetchStops(route:agency:direction:)` | `GET /api/v1/stops?route=&direction=[&agency=]` -> `[RouteStop]` |
 | `fetchArrivals(stopId:route:direction:)` | `GET /api/v1/arrivals?stop_id=&route=&direction=[&agency=]` -> `[StopArrival]` |
 | `fetchLuasArrivals(stopId:direction:routeName:)` | `GET /api/v1/luas/arrivals?stop_id=&direction=&route=` |
-| `fetchNearby(lat:lon:mode:)` | `GET /api/v1/nearby?lat=&lon=&mode=` -> `{stops: [{id, name, lat, lon, distance_m}], departures: [{route, agency_id, direction, headsign?, stop_id, distance_m, times: [{trip_id, at, delay, source: live\|realtime\|timetable, cancelled}]}]}` |
+| `fetchNearby(lat:lon:mode:)` | `GET /api/v1/nearby?lat=&lon=&mode=` -> `{stops: [{id, name, lat, lon, distance_m}], departures: [{route, agency_id, direction, headsign?, stop_id, distance_m, times: [{trip_id, at, delay, source: live\|realtime\|timetable, cancelled}]}]}`; `stops` is every stop of the mode within the radius (300 m bus, 800 m Luas/train), nearest first, at most 30 |
+| `fetchDepartures(stopId:)` | `GET /api/v1/departures?stop_id=` -> `{stop: {id, name, code?, lat, lon, modes}, departures: [...]}` (rows as `/nearby`, `distance_m` 0, `stop_id` the requested stop; Luas: both platforms); 404 `unknown stop` |
+| `fetchStations(mode:)` | `GET /api/v1/stations?mode=luas\|train` -> `[{id, name, lat, lon}]` (one per Luas stop, platforms merged into the lower stop ID); 400 for bus |
 | `search(query:mode:)` | `GET /api/v1/search?q=[&mode=]` -> `{stops: [{id, name, lat, lon, modes}], routes: [{name, agency_id, agency_name?, mode, headsign_outbound?, headsign_inbound?}]}` |
 
 Errors are `{"error": "..."}`. 401/403 means a bad key, 429 the per-client rate limit
@@ -141,7 +156,7 @@ maps each to a message and the models keep their last good data and retry.
 
 ### Contract fixtures
 
-`TurasTests/Fixtures/{vehicles,arrivals,routes,stops,error,nearby,search}.json` are byte-identical
+`TurasTests/Fixtures/{vehicles,arrivals,routes,stops,error,nearby,search,departures,stations}.json` are byte-identical
 copies of the server's `testdata/contract/*.json`, which the server's
 `TestContractFixtures` checks against its encoder. `ContractFixtureTests`
 (`TurasTests/ContractFixtureTests.swift`) decodes them here. When the server contract
