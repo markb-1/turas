@@ -386,12 +386,18 @@ final class StopModelTests: XCTestCase {
 
     // MARK: - Caption
 
+    func testCaptionOmitsInternalCodeOutsideBus() {
+        XCTAssertEqual(StopModel.caption(mode: .luas, code: "998021", distanceMetres: 240), "240 m")
+        XCTAssertNil(StopModel.caption(mode: .train, code: "999100", distanceMetres: nil))
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: "7602", distanceMetres: 240), "Stop 7602 · 240 m")
+    }
+
     func testCaptionAndDistance() async {
-        XCTAssertEqual(StopModel.caption(code: "7602", distanceMetres: 240), "Stop 7602 · 240 m")
-        XCTAssertEqual(StopModel.caption(code: nil, distanceMetres: 240), "240 m")
-        XCTAssertEqual(StopModel.caption(code: "7602", distanceMetres: nil), "Stop 7602")
-        XCTAssertEqual(StopModel.caption(code: "", distanceMetres: nil), nil, "an empty code is not 'Stop '")
-        XCTAssertEqual(StopModel.caption(code: nil, distanceMetres: 1250), "1.3 km")
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: "7602", distanceMetres: 240), "Stop 7602 · 240 m")
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: nil, distanceMetres: 240), "240 m")
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: "7602", distanceMetres: nil), "Stop 7602")
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: "", distanceMetres: nil), nil, "an empty code is not 'Stop '")
+        XCTAssertEqual(StopModel.caption(mode: .bus, code: nil, distanceMetres: 1250), "1.3 km")
 
         // 100 m north of the stop.
         let user = CLLocationCoordinate2D(latitude: collegeGreen.lat + 100 / 111_195, longitude: collegeGreen.lon)

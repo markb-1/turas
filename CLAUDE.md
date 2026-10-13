@@ -77,7 +77,7 @@ or `.focus(RouteFocusTarget)`.
 |---|---|---|---|
 | `.timeline` | a fixed centre marker (drawn in `Theme.ink`), a faint circle of the mode's radius (300 m bus, 800 m Luas/train), and pins from `HomeModel.mapPins`: bus stops from `/nearby`'s `stops`, Luas/train stations from `/stations` | mode tabs + rows sorted by first time | `/nearby` 30 s |
 | `.search` | unchanged | Stops / Routes / Places (8 each) | none (250 ms debounce) |
-| `.stop` | the same pins, centred on the stop with its pin highlighted (added if it is not among them); no marker or circle | stop name, "Stop 7602 · 240 m", one row per route and direction with its next 3 times (`StopModel`) | `/departures` 30 s |
+| `.stop` | the same pins, centred on the stop with its pin highlighted (added if it is not among them); no marker or circle | stop name, "Stop 7602 · 240 m" (the "Stop <code>" part for bus only; Luas and train show just the distance), one row per route and direction with its next 3 times (`StopModel`) | `/departures` 30 s |
 | `.focus` | one direction's bundled shape, its vehicles, the stop | route, destination, stop, next times, ⇄ | vehicles + arrivals 30 s |
 
 - The timeline follows the map: `HomeView` reports `onMapCameraChange(.onEnd)`, and

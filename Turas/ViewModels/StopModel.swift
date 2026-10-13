@@ -77,12 +77,13 @@ final class StopModel: ObservableObject {
         return Int(metres.rounded())
     }
 
-    /// "Stop 7602 · 240 m", either part alone, or nil with neither.
-    var caption: String? { Self.caption(code: info?.code, distanceMetres: distanceFromUser) }
+    /// "Stop 7602 · 240 m", either part alone, or nil with neither. Only bus
+    /// stops show a code: Luas and rail codes are TFI internals riders never see.
+    var caption: String? { Self.caption(mode: target.mode, code: info?.code, distanceMetres: distanceFromUser) }
 
-    nonisolated static func caption(code: String?, distanceMetres: Int?) -> String? {
+    nonisolated static func caption(mode: TransportMode, code: String?, distanceMetres: Int?) -> String? {
         var parts: [String] = []
-        if let code, !code.isEmpty {
+        if mode == .bus, let code, !code.isEmpty {
             parts.append("Stop \(code)")
         }
         if let distanceMetres {
