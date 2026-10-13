@@ -29,6 +29,10 @@ enum UITestStubServer {
             return (200, arrivals(route: value("route") ?? "39A"))
         case "/api/v1/routes":
             return (200, "[]")
+        case "/api/v1/stations":
+            return stations(mode: value("mode") ?? "")
+        case "/api/v1/departures":
+            return departures(stopId: value("stop_id") ?? "")
         default:
             return (404, #"{"error": "not stubbed"}"#)
         }
@@ -52,8 +56,8 @@ enum UITestStubServer {
         switch mode {
         case "luas":
             return """
-            {"stops": [{"id": "LUAS-ABB", "name": "Abbey Street", "lat": 53.3485, "lon": -6.2583, "distance_m": 300}],
-             "departures": [{"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Tallaght", "stop_id": "LUAS-ABB", "distance_m": 300,
+            {"stops": [{"id": "LUAS-ABB", "name": "Abbey Street", "lat": 53.3452, "lon": -6.2580, "distance_m": 160}],
+             "departures": [{"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Tallaght", "stop_id": "LUAS-ABB", "distance_m": 160,
                              "times": [\(time(3)), \(time(9)), \(time(15))]}]}
             """
         case "train":
@@ -65,11 +69,12 @@ enum UITestStubServer {
         default:
             return """
             {"stops": [{"id": "8220DB000400", "name": "College Green", "lat": 53.3441, "lon": -6.2595, "distance_m": 90},
-                       {"id": "8220DB000401", "name": "Dame Street", "lat": 53.3439, "lon": -6.2660, "distance_m": 420}],
+                       {"id": "8220DB000404", "name": "Trinity", "lat": 53.3447, "lon": -6.2580, "distance_m": 120},
+                       {"id": "8220DB000401", "name": "Dame Street", "lat": 53.3439, "lon": -6.2630, "distance_m": 230}],
              "departures": [
                {"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 90,
                 "times": [\(time(2)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
-               {"route": "16", "agency_id": "1", "direction": 1, "headsign": "Ballinteer", "stop_id": "8220DB000401", "distance_m": 420,
+               {"route": "16", "agency_id": "1", "direction": 1, "headsign": "Ballinteer", "stop_id": "8220DB000401", "distance_m": 230,
                 "times": [\(time(5, source: "realtime", cancelled: true)), \(time(19, cancelled: true))]},
                {"route": "46A", "agency_id": "1", "direction": 0, "stop_id": "8220DB000400", "distance_m": 90,
                 "times": [\(time(8, source: "timetable"))]}
@@ -99,7 +104,7 @@ enum UITestStubServer {
         }
         return """
         [{"id": "8220DB000400", "name": "College Green", "lat": 53.3441, "lon": -6.2595, "seq": 1, "t": 0},
-         {"id": "8220DB000401", "name": "Dame Street", "lat": 53.3439, "lon": -6.2660, "seq": 2, "t": 90},
+         {"id": "8220DB000401", "name": "Dame Street", "lat": 53.3439, "lon": -6.2630, "seq": 2, "t": 90},
          {"id": "8220DB000405", "name": "Christchurch", "lat": 53.3434, "lon": -6.2710, "seq": 3, "t": 180}]
         """
     }
@@ -118,6 +123,95 @@ enum UITestStubServer {
          {"trip_id": "stub-14", "route": "\(route)", "headsign": "Ongar", "delay": 0, "predicted_arrival": "\(at(14))", "is_live": false, "is_cancelled": false},
          {"trip_id": "stub-27", "route": "\(route)", "headsign": "Ongar", "delay": 0, "predicted_arrival": "\(at(27))", "is_live": false, "is_cancelled": true}]
         """
+    }
+
+    /// Every station of a mode. The Luas stations sit within 250 m of
+    /// College Green so their pins are on screen at the home zoom.
+    private static func stations(mode: String) -> (status: Int, json: String) {
+        switch mode {
+        case "luas":
+            return (200, """
+            [{"id": "LUAS-ABB", "name": "Abbey Street", "lat": 53.3452, "lon": -6.2580},
+             {"id": "LUAS-JER", "name": "Jervis", "lat": 53.3449, "lon": -6.2625}]
+            """)
+        case "train":
+            return (200, """
+            [{"id": "IR-CON", "name": "Connolly", "lat": 53.3531, "lon": -6.2489},
+             {"id": "IR-TARA", "name": "Tara Street", "lat": 53.3470, "lon": -6.2545}]
+            """)
+        default:
+            return (400, #"{"error": "mode must be luas or train"}"#)
+        }
+    }
+
+    /// Every route and direction at a stub stop, distance 0; 404 otherwise.
+    private static func departures(stopId: String) -> (status: Int, json: String) {
+        func stop(_ id: String, _ name: String, code: String?, lat: Double, lon: Double, mode: String) -> String {
+            let codeField = code.map { #""code": "\#($0)", "# } ?? ""
+            return #"{"id": "\#(id)", "name": "\#(name)", \#(codeField)"lat": \#(lat), "lon": \#(lon), "modes": ["\#(mode)"]}"#
+        }
+        switch stopId {
+        case "8220DB000400":
+            return (200, """
+            {"stop": \(stop("8220DB000400", "College Green", code: "400", lat: 53.3441, lon: -6.2595, mode: "bus")),
+             "departures": [
+               {"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 0,
+                "times": [\(time(2)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
+               {"route": "46A", "agency_id": "1", "direction": 0, "headsign": "Dún Laoghaire", "stop_id": "8220DB000400", "distance_m": 0,
+                "times": [\(time(8, source: "timetable"))]}
+             ]}
+            """)
+        case "8220DB000401":
+            return (200, """
+            {"stop": \(stop("8220DB000401", "Dame Street", code: "401", lat: 53.3439, lon: -6.2630, mode: "bus")),
+             "departures": [
+               {"route": "16", "agency_id": "1", "direction": 1, "headsign": "Ballinteer", "stop_id": "8220DB000401", "distance_m": 0,
+                "times": [\(time(5, source: "realtime", cancelled: true)), \(time(19, cancelled: true))]}
+             ]}
+            """)
+        case "8220DB000404":
+            return (200, """
+            {"stop": \(stop("8220DB000404", "Trinity", code: "404", lat: 53.3447, lon: -6.2580, mode: "bus")), "departures": []}
+            """)
+        case "LUAS-ABB":
+            return (200, """
+            {"stop": \(stop("LUAS-ABB", "Abbey Street", code: nil, lat: 53.3452, lon: -6.2580, mode: "luas")),
+             "departures": [
+               {"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Tallaght", "stop_id": "LUAS-ABB", "distance_m": 0,
+                "times": [\(time(3)), \(time(9)), \(time(15))]},
+               {"route": "Red", "agency_id": "10000", "direction": 1, "headsign": "The Point", "stop_id": "LUAS-ABB", "distance_m": 0,
+                "times": [\(time(4)), \(time(11))]}
+             ]}
+            """)
+        case "LUAS-JER":
+            return (200, """
+            {"stop": \(stop("LUAS-JER", "Jervis", code: nil, lat: 53.3449, lon: -6.2625, mode: "luas")),
+             "departures": [
+               {"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Tallaght", "stop_id": "LUAS-JER", "distance_m": 0,
+                "times": [\(time(5)), \(time(11))]}
+             ]}
+            """)
+        case "IR-TARA":
+            return (200, """
+            {"stop": \(stop("IR-TARA", "Tara Street", code: nil, lat: 53.3470, lon: -6.2545, mode: "train")),
+             "departures": [
+               {"route": "DART", "agency_id": "IR", "direction": 1, "headsign": "Bray", "stop_id": "IR-TARA", "distance_m": 0,
+                "times": [\(time(6)), \(time(21, source: "timetable"))]},
+               {"route": "DART", "agency_id": "IR", "direction": 0, "headsign": "Howth", "stop_id": "IR-TARA", "distance_m": 0,
+                "times": [\(time(9))]}
+             ]}
+            """)
+        case "IR-CON":
+            return (200, """
+            {"stop": \(stop("IR-CON", "Connolly", code: nil, lat: 53.3531, lon: -6.2489, mode: "train")),
+             "departures": [
+               {"route": "DART", "agency_id": "IR", "direction": 1, "headsign": "Greystones", "stop_id": "IR-CON", "distance_m": 0,
+                "times": [\(time(7))]}
+             ]}
+            """)
+        default:
+            return (404, #"{"error": "unknown stop"}"#)
+        }
     }
 
     final class StubProtocol: URLProtocol {
