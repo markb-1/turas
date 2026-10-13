@@ -71,7 +71,7 @@ final class ComponentRenderTests: XCTestCase {
         render(RouteFocusView(focus: focus, onBack: {}, backLabel: "Back to stop"))
     }
 
-    func testHomeViewRenders() {
+    func testHomeViewRendersEveryScreen() async {
         let clock = ManualClock()
         let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
@@ -82,6 +82,17 @@ final class ComponentRenderTests: XCTestCase {
         }, makeStop: { target, userLocation in
             StopModel(target: target, userLocation: userLocation, source: FakeStopSource(), clock: clock.appClock)
         })
+        render(HomeView(model: model)) // timeline: marker, circle, pins
+
+        // A stop reached by search: its highlighted pin is drawn (HomeModelTests cover mapPins).
+        model.openStop(StopTarget(SampleData.taraStreet, mode: .train))
+        await waitUntil { model.stop?.status == .loaded }
+        render(HomeView(model: model)) // stop view
+
+        model.openFocus(departure: model.stop!.departures[0])
+        render(HomeView(model: model)) // focus over the stop view
+        model.closeFocus()
+        model.closeStop()
         render(HomeView(model: model))
     }
 
