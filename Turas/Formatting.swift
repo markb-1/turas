@@ -21,6 +21,22 @@ enum DepartureFormatting {
         return "\(minutes)"
     }
 
+    /// A realtime or live time at least this many seconds late shows it.
+    static let lateThreshold = 120
+
+    /// Whole minutes late, rounded down, for a realtime or live time at
+    /// least 2 minutes late; nil when on time, early, cancelled or
+    /// timetable-only (a scheduled time has no delay to report).
+    static func lateMinutes(_ time: DepartureTime) -> Int? {
+        guard !time.cancelled, time.source != .timetable, time.delay >= lateThreshold else { return nil }
+        return time.delay / 60
+    }
+
+    /// "3 min late".
+    static func lateText(minutes: Int) -> String {
+        "\(minutes) min late"
+    }
+
     /// "90 m" or "1.3 km".
     static func distanceText(metres: Int) -> String {
         if metres < 1000 { return "\(metres) m" }
@@ -178,7 +194,8 @@ enum AccessibilityText {
     }
 
     /// One label per timeline row: "39A to Ongar from College Green, 90
-    /// metres. Live, 2 minutes, then 14 and 27 minutes." Without a stop
+    /// metres. Live, 2 minutes, then 14 and 27 minutes." A late first time
+    /// adds "…, 2 minutes, 3 minutes late, then …". Without a stop
     /// name (the stop view's rows): "39A to Ongar. Live, 2 minutes, …"
     static func departure(_ departure: NearbyDeparture, stopName: String?, now: Date) -> String {
         var label = "\(departure.route) to \(departure.destination)"
@@ -201,6 +218,9 @@ enum AccessibilityText {
             }
         }
         var text = label + "\(source), \(minutesPhrase(until: first.at, now: now))"
+        if let late = DepartureFormatting.lateMinutes(first) {
+            text += ", \(late) minutes late" // at least 2
+        }
 
         let later = departure.times.dropFirst()
         if !later.isEmpty {

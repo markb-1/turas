@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The first time large (brand when live, muted when timetable, struck
-/// through when cancelled, with a dot for live) and the next ones small.
-/// Later times that are cancelled are struck through too.
+/// through when cancelled, with a dot for live) and the next ones small,
+/// led by "3 min late" in the late colour when the first time is 2 or
+/// more minutes late. Later times that are cancelled are struck through too.
 struct TimeStack: View {
     let times: [DepartureTime]
     let now: Date
@@ -22,28 +23,30 @@ struct TimeStack: View {
                         .foregroundStyle(Theme.timeColor(for: first.source, cancelled: first.cancelled))
                         .strikethrough(first.cancelled)
                 }
-                if times.count > 1 {
-                    later(Array(times.dropFirst()))
+                let late = DepartureFormatting.lateMinutes(first)
+                if late != nil || times.count > 1 {
+                    caption(late: late, rest: Array(times.dropFirst()))
                 }
             }
             .accessibilityHidden(true)
         }
     }
 
-    /// Later times as one wrapping `Text`, so large type wraps instead of
-    /// truncating while each cancelled time keeps its own strikethrough.
-    private func later(_ rest: [DepartureTime]) -> Text {
-        var result = Text("")
-        for (index, time) in rest.enumerated() {
-            if index > 0 {
-                result = result + Text(" · ").foregroundColor(Theme.muted)
-            }
+    /// The late note and later times as one wrapping `Text`, so large type
+    /// wraps instead of truncating while each cancelled time keeps its own
+    /// strikethrough. The note shares the line so a late row is no taller.
+    private func caption(late: Int?, rest: [DepartureTime]) -> Text {
+        var parts: [Text] = []
+        if let late {
+            parts.append(Text(DepartureFormatting.lateText(minutes: late)).foregroundColor(Theme.late))
+        }
+        for time in rest {
             let part = Text(DepartureFormatting.laterTimeText(at: time.at, now: now))
-            if time.cancelled {
-                result = result + part.strikethrough().foregroundColor(Theme.cancelled)
-            } else {
-                result = result + part.foregroundColor(Theme.muted)
-            }
+            parts.append(time.cancelled ? part.strikethrough().foregroundColor(Theme.cancelled) : part.foregroundColor(Theme.muted))
+        }
+        var result = parts.first ?? Text("")
+        for part in parts.dropFirst() {
+            result = result + Text(" · ").foregroundColor(Theme.muted) + part
         }
         return result
             .font(.caption)

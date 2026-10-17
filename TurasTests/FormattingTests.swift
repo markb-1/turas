@@ -121,6 +121,19 @@ final class FormattingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(DepartureFormatting.tick, 5)
     }
 
+    func testLateMinutes() {
+        func time(delay: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
+            DepartureTime(tripId: "t", at: now, delay: delay, source: source, cancelled: cancelled)
+        }
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 119)), "under 2 minutes is on time")
+        XCTAssertEqual(DepartureFormatting.lateMinutes(time(delay: 120)), 2)
+        XCTAssertEqual(DepartureFormatting.lateMinutes(time(delay: 239, source: .realtime)), 3, "whole minutes, rounded down")
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 600, source: .timetable)), "a timetable time has no delay to show")
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 600, cancelled: true)))
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: -300)), "early is not late")
+        XCTAssertEqual(DepartureFormatting.lateText(minutes: 3), "3 min late")
+    }
+
     func testDistanceAndWalkText() {
         XCTAssertEqual(DepartureFormatting.distanceText(metres: 90), "90 m")
         XCTAssertEqual(DepartureFormatting.distanceText(metres: 999), "999 m")
@@ -131,8 +144,8 @@ final class FormattingTests: XCTestCase {
     }
 
     func testDepartureLabel() {
-        func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
-            DepartureTime(tripId: "t\(minutes)", at: now.addingTimeInterval(TimeInterval(minutes * 60)), delay: 0, source: source, cancelled: cancelled)
+        func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false, delay: Int = 0) -> DepartureTime {
+            DepartureTime(tripId: "t\(minutes)", at: now.addingTimeInterval(TimeInterval(minutes * 60)), delay: delay, source: source, cancelled: cancelled)
         }
         func row(_ times: [DepartureTime], distance: Int = 90) -> NearbyDeparture {
             NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: "Ongar", stopId: "S", distanceM: distance, times: times)
@@ -165,6 +178,24 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(
             AccessibilityText.departure(row([]), stopName: "College Green", now: now),
             "39A to Ongar from College Green, 90 metres. No times."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2, delay: 200), time(14, delay: 600)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, 2 minutes, 3 minutes late, then 14 minutes.",
+            "only the first time's delay is spoken"
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(0, source: .realtime, delay: 60)]), stopName: nil, now: now),
+            "39A to Ongar. Estimated, due now.",
+            "under 2 minutes late is not mentioned"
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(4, source: .realtime, delay: 120)]), stopName: nil, now: now),
+            "39A to Ongar. Estimated, 4 minutes, 2 minutes late."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(4, source: .timetable, delay: 300)]), stopName: nil, now: now),
+            "39A to Ongar. Scheduled, 4 minutes."
         )
         let noHeadsign = NearbyDeparture(route: "Green", agencyId: "10000", direction: 1, headsign: nil, stopId: "L", distanceM: 40, times: [time(3)])
         XCTAssertEqual(
