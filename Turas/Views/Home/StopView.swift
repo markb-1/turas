@@ -17,7 +17,7 @@ struct StopView: View {
             ScrollView {
                 LazyVStack(spacing: Theme.cardSpacing) {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
-                        ForEach(stop.departures) { departure in
+                        ForEach(Upcoming.departures(stop.departures, now: context.date)) { departure in
                             Button {
                                 onSelect(departure)
                             } label: {

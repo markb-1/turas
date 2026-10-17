@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The "leaving soonest" list for one mode, with the status banner above
-/// it. Minute texts tick every 30 s.
+/// it. Minute texts tick every 30 s, and times that have left drop out
+/// (`Upcoming`), so kept rows never pile up as "Due".
 struct DepartureTimeline: View {
     @ObservedObject var nearby: NearbyModel
     let mode: TransportMode
@@ -21,7 +22,7 @@ struct DepartureTimeline: View {
             ScrollView {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     LazyVStack(spacing: Theme.cardSpacing) {
-                        ForEach(nearby.departures) { departure in
+                        ForEach(Upcoming.departures(nearby.departures, now: context.date)) { departure in
                             Button {
                                 onSelect(departure)
                             } label: {

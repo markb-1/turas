@@ -6,7 +6,8 @@ final class FormattingTests: XCTestCase {
 
     func testMinutesText() {
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(30), now: now), "Due")
-        XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(-90), now: now), "Due")
+        // The oldest time still shown (Upcoming drops anything older).
+        XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(-30), now: now), "Due")
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(65), now: now), "1 min")
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(12 * 60 + 5), now: now), "12 mins")
     }
@@ -58,7 +59,7 @@ final class FormattingTests: XCTestCase {
 
     func testFirstTimeText() {
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(30), now: now), "Due")
-        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(-60), now: now), "Due")
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(-30), now: now), "Due")
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(90), now: now), "1 min")
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(14 * 60 + 20), now: now), "14 min")
     }
@@ -67,6 +68,51 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(20), now: now), "Due")
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(14 * 60), now: now), "14")
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(27 * 60 + 59), now: now), "27")
+    }
+
+    // MARK: - Upcoming
+
+    private func time(_ seconds: TimeInterval, _ trip: String = "t") -> DepartureTime {
+        DepartureTime(tripId: trip, at: now.addingTimeInterval(seconds), delay: 0, source: .live, cancelled: false)
+    }
+
+    private func row(_ headsign: String, _ times: [DepartureTime]) -> NearbyDeparture {
+        NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: headsign, stopId: "S", distanceM: 90, times: times)
+    }
+
+    func testUpcomingKeepsTimesUpTo30SecondsPast() {
+        XCTAssertTrue(Upcoming.isUpcoming(now.addingTimeInterval(-30), now: now))
+        XCTAssertFalse(Upcoming.isUpcoming(now.addingTimeInterval(-31), now: now))
+        XCTAssertTrue(Upcoming.isUpcoming(now.addingTimeInterval(600), now: now))
+    }
+
+    func testUpcomingDeparturesDropDepartedTimesAndEmptyRows() {
+        let rows = [
+            row("Ongar", [time(-90, "gone"), time(-20, "due"), time(600, "later")]),
+            row("Gone", [time(-45), time(-31)]),
+            row("Empty", []),
+        ]
+        let upcoming = Upcoming.departures(rows, now: now)
+        XCTAssertEqual(upcoming.map(\.headsign), ["Ongar"], "rows with no times left are hidden")
+        XCTAssertEqual(upcoming.first?.times.map(\.tripId), ["due", "later"])
+        XCTAssertEqual(upcoming.first?.id, rows[0].id, "the row keeps its identity")
+    }
+
+    func testUpcomingDeparturesResortByTheNewFirstTime() {
+        let rows = [
+            row("A", [time(-60), time(12 * 60)]),
+            row("B", [time(3 * 60)]),
+            row("C", [time(3 * 60)]),
+        ]
+        XCTAssertEqual(Upcoming.departures(rows, now: now).map(\.headsign), ["B", "C", "A"], "stable for equal first times")
+    }
+
+    func testUpcomingArrivals() {
+        func arrival(_ id: String, in seconds: TimeInterval) -> StopArrival {
+            StopArrival(id: id, routeId: "39A", headsign: nil, delay: 0, predictedArrival: now.addingTimeInterval(seconds), isLive: true, isCancelled: false)
+        }
+        let arrivals = [arrival("gone", in: -31), arrival("due", in: -30), arrival("later", in: 300)]
+        XCTAssertEqual(Upcoming.arrivals(arrivals, now: now).map(\.id), ["due", "later"])
     }
 
     func testDistanceAndWalkText() {

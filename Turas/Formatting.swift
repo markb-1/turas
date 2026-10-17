@@ -38,6 +38,37 @@ enum DepartureFormatting {
     }
 }
 
+/// The times worth showing at a moment. The server can send a realtime or
+/// live time up to a minute in the past, and rows kept after a failed
+/// refresh age, so each render drops what has left.
+enum Upcoming {
+    /// A time further in the past than this has left.
+    static let grace: TimeInterval = 30
+
+    static func isUpcoming(_ date: Date, now: Date) -> Bool {
+        date.timeIntervalSince(now) >= -grace
+    }
+
+    /// Each row without its departed times, rows with none left hidden,
+    /// re-sorted by the first remaining time (stable, as the server sends them).
+    static func departures(_ rows: [NearbyDeparture], now: Date) -> [NearbyDeparture] {
+        let kept = rows.compactMap { row -> NearbyDeparture? in
+            let times = row.times.filter { isUpcoming($0.at, now: now) }
+            guard !times.isEmpty else { return nil }
+            return NearbyDeparture(route: row.route, agencyId: row.agencyId, direction: row.direction, headsign: row.headsign,
+                                   stopId: row.stopId, distanceM: row.distanceM, times: times)
+        }
+        return kept.enumerated()
+            .sorted { ($0.element.times[0].at, $0.offset) < ($1.element.times[0].at, $1.offset) }
+            .map(\.element)
+    }
+
+    /// Route focus's arrivals without the departed ones.
+    static func arrivals(_ arrivals: [StopArrival], now: Date) -> [StopArrival] {
+        arrivals.filter { isUpcoming($0.predictedArrival, now: now) }
+    }
+}
+
 /// User-facing text for server and network errors, shared by the models.
 enum ServerErrorText {
     static func message(for error: Error) -> String {

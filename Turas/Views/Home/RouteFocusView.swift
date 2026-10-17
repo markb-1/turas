@@ -92,7 +92,7 @@ struct RouteFocusView: View {
                          message: focus.errorMessage ?? "No upcoming times at this stop.")
         } else {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                ForEach(focus.arrivals.prefix(6)) { arrival in
+                ForEach(Upcoming.arrivals(focus.arrivals, now: context.date).prefix(6)) { arrival in
                     arrivalRow(arrival, now: context.date)
                 }
             }

@@ -100,6 +100,9 @@ or `.focus(RouteFocusTarget)`.
   follows each new fix) and route focus's walking time use it only while authorised.
 - Errors keep the last rows with "Updated N min ago" and Retry; 503 shows "Turas is
   starting up…" and retries; 429 retries silently on the next tick.
+- Each render drops times more than 30 s past (`Upcoming`) in the timeline, stop view and
+  route focus, hides rows with none left and re-sorts by the new first time, so kept rows
+  never turn into a column of "Due".
 - Search stop rows show their modes and distance from the map centre ("Bus · 1.2 km"),
   which tells same-name stops apart.
 - Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep.
