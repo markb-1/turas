@@ -8,14 +8,18 @@ actor TurasServerService {
     private let baseURL: String
     private let apiKey: String
     private let session: URLSession
+    private let clockOffset: ServerClockOffset?
 
     private static let logger = Logger(subsystem: "com.turas", category: "TurasServerService")
 
     /// - Parameter session: injected by tests (a URLProtocol stub); the
     ///   default is an ephemeral session with a 10 second timeout.
-    init(config: ServerConfig, session: URLSession? = nil) {
+    /// - Parameter clockOffset: fed from each successful response's `Date`
+    ///   header; nil records nothing.
+    init(config: ServerConfig, session: URLSession? = nil, clockOffset: ServerClockOffset? = nil) {
         self.baseURL = config.baseURL
         self.apiKey = config.apiKey
+        self.clockOffset = clockOffset
         if let session {
             self.session = session
         } else {
@@ -152,8 +156,26 @@ actor TurasServerService {
             throw TurasServerError.httpError(statusCode: httpResponse.statusCode)
         }
 
+        if let clockOffset, let header = httpResponse.value(forHTTPHeaderField: "Date"),
+           let serverDate = Self.parseHTTPDate(header) {
+            clockOffset.record(serverDate: serverDate, deviceDate: Date())
+        }
+
         return data
     }
+
+    /// Parses an HTTP `Date` header ("Sat, 10 Oct 2026 11:00:00 GMT").
+    static func parseHTTPDate(_ string: String) -> Date? {
+        httpDateFormatter.date(from: string)
+    }
+
+    private static let httpDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter
+    }()
 
     /// Builds a request URL, percent-encoding every query value, including
     /// characters URLComponents would otherwise leave alone ("+", "&", "=").

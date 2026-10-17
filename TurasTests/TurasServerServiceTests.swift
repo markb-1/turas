@@ -19,6 +19,45 @@ final class TurasServerServiceTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "test-key")
     }
 
+    // MARK: - Clock offset
+
+    /// An HTTP Date header for `date` (RFC 1123, whole seconds, GMT).
+    private func httpDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        return formatter.string(from: date)
+    }
+
+    func testSuccessfulResponsesRecordTheServerClock() async throws {
+        let offset = ServerClockOffset()
+        let service = TurasServerService(config: config, session: StubURLProtocol.session(), clockOffset: offset)
+        StubURLProtocol.stub.set(body: Data("[]".utf8), headers: ["Date": httpDate(Date().addingTimeInterval(120))])
+
+        _ = try await service.fetchVehicles(mode: .bus)
+
+        XCTAssertEqual(offset.correction, 120, accuracy: 2, "the header has 1 s resolution")
+    }
+
+    func testFailedOrUndatedResponsesRecordNothing() async throws {
+        let offset = ServerClockOffset()
+        let service = TurasServerService(config: config, session: StubURLProtocol.session(), clockOffset: offset)
+        StubURLProtocol.stub.set(statusCode: 503, body: Data(#"{"error": "loading"}"#.utf8), headers: ["Date": httpDate(Date().addingTimeInterval(120))])
+        _ = try? await service.fetchVehicles(mode: .bus)
+        StubURLProtocol.stub.set(body: Data("[]".utf8), headers: ["Date": "not a date"])
+        _ = try await service.fetchVehicles(mode: .bus)
+        StubURLProtocol.stub.set(body: Data("[]".utf8))
+        _ = try await service.fetchVehicles(mode: .bus)
+
+        XCTAssertEqual(offset.correction, 0)
+    }
+
+    func testParsesHTTPDates() {
+        XCTAssertEqual(TurasServerService.parseHTTPDate("Sat, 10 Oct 2026 11:00:00 GMT"), Date(timeIntervalSince1970: 1_791_630_000))
+        XCTAssertNil(TurasServerService.parseHTTPDate("2026-10-10T11:00:00Z"))
+    }
+
     func testFetchArrivalsQuery() async throws {
         StubURLProtocol.stub.set(body: try Fixture.data("arrivals"))
 

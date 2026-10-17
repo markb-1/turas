@@ -56,7 +56,8 @@ Turas/
     PlaceSearchService      PlaceSearching; MapKitPlaceSearch (MKLocalSearch) limited to Ireland,
                             addresses and points of interest as two requests
     LocationService         @MainActor CLLocationManager wrapper; LocationProviding
-    AppClock                now + sleep, injected into the models
+    AppClock                now + sleep, injected into the models; ServerClockOffset
+                            (server Date header minus device clock) corrects `now`
     FavouritesStore         @MainActor recents and starred routes (no UI yet)
     StationStore            @MainActor Luas and train station lists from /stations, one fetch per mode per session
   ViewModels/               HomeModel, NearbyModel, SearchModel, StopModel, RouteFocusModel (all @MainActor)
@@ -112,7 +113,10 @@ or `.focus(RouteFocusTarget)`.
   ahead of the later times (timeline and stop view), and its VoiceOver label says so.
 - Shown times re-format every 5 s (`DepartureFormatting.tick`) against the model's
   clock (`now()`), not the `TimelineView` date, so fresh rows are never formatted late.
-- Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep.
+- Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep. The
+  app's models use `AppClock.corrected(by:)`: `TurasServerService` records each 200
+  response's `Date` header in `ServerClockOffset` (median of the last 5), and an offset
+  over 30 s is added to the device clock. Tests default to `.system` and no offset.
 
 ### Route identity
 
