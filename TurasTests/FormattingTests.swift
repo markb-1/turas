@@ -115,6 +115,12 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Upcoming.arrivals(arrivals, now: now).map(\.id), ["due", "later"])
     }
 
+    func testCountdownsTickWellUnderAMinute() {
+        // A shown time lags the clock by at most one tick.
+        XCTAssertLessThanOrEqual(DepartureFormatting.tick, 10)
+        XCTAssertGreaterThanOrEqual(DepartureFormatting.tick, 5)
+    }
+
     func testDistanceAndWalkText() {
         XCTAssertEqual(DepartureFormatting.distanceText(metres: 90), "90 m")
         XCTAssertEqual(DepartureFormatting.distanceText(metres: 999), "999 m")

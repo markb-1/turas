@@ -105,6 +105,8 @@ or `.focus(RouteFocusTarget)`.
   never turn into a column of "Due".
 - Search stop rows show their modes and distance from the map centre ("Bus · 1.2 km"),
   which tells same-name stops apart.
+- Shown times re-format every 5 s (`DepartureFormatting.tick`) against the model's
+  clock (`now()`), not the `TimelineView` date, so fresh rows are never formatted late.
 - Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep.
 
 ### Route identity

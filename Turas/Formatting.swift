@@ -2,15 +2,20 @@ import Foundation
 
 /// Text for timeline rows.
 enum DepartureFormatting {
+    /// How often the views re-format shown times, in seconds: a countdown
+    /// lags the clock by at most this. Each tick reads the model's clock, so
+    /// freshly polled rows are formatted against the current time too.
+    static let tick: TimeInterval = 5
+
     /// The big first time: "Due", "1 min", "14 min".
-    static func firstTimeText(at date: Date, now: Date = Date()) -> String {
+    static func firstTimeText(at date: Date, now: Date) -> String {
         let minutes = wholeMinutes(until: date, now: now)
         if minutes < 1 { return "Due" }
         return "\(minutes) min"
     }
 
     /// Later times are just the minutes: "14", "27"; "Due" under a minute.
-    static func laterTimeText(at date: Date, now: Date = Date()) -> String {
+    static func laterTimeText(at date: Date, now: Date) -> String {
         let minutes = wholeMinutes(until: date, now: now)
         if minutes < 1 { return "Due" }
         return "\(minutes)"
@@ -108,7 +113,7 @@ enum ServerErrorText {
 /// Text shown for arrivals, kept out of the views so it can be tested.
 enum ArrivalFormatting {
     /// "Due", "1 min", "12 mins".
-    static func minutesText(until date: Date, now: Date = Date()) -> String {
+    static func minutesText(until date: Date, now: Date) -> String {
         let minutes = Int(date.timeIntervalSince(now) / 60)
         if minutes < 1 { return "Due" }
         if minutes == 1 { return "1 min" }
@@ -116,7 +121,7 @@ enum ArrivalFormatting {
     }
 
     /// "Updated just now", "Updated 12s ago", "Updated 3 min ago".
-    static func updatedText(since date: Date, now: Date = Date()) -> String {
+    static func updatedText(since date: Date, now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 5 { return "Updated just now" }
         if seconds < 60 { return "Updated \(seconds)s ago" }
@@ -149,7 +154,7 @@ enum AccessibilityText {
     }
 
     /// "To Ongar, in 5 minutes, live, 2 minutes late".
-    static func arrival(_ arrival: StopArrival, now: Date = Date()) -> String {
+    static func arrival(_ arrival: StopArrival, now: Date) -> String {
         var parts: [String] = []
         if let headsign = arrival.headsign, !headsign.isEmpty {
             parts.append("To \(headsign)")
@@ -175,7 +180,7 @@ enum AccessibilityText {
     /// One label per timeline row: "39A to Ongar from College Green, 90
     /// metres. Live, 2 minutes, then 14 and 27 minutes." Without a stop
     /// name (the stop view's rows): "39A to Ongar. Live, 2 minutes, …"
-    static func departure(_ departure: NearbyDeparture, stopName: String?, now: Date = Date()) -> String {
+    static func departure(_ departure: NearbyDeparture, stopName: String?, now: Date) -> String {
         var label = "\(departure.route) to \(departure.destination)"
         if let stopName {
             label += " from \(stopName), \(distance(metres: departure.distanceM))"

@@ -67,6 +67,9 @@ final class StopModel: ObservableObject {
         self.clock = clock
     }
 
+    /// The time rows are formatted against (the injected clock).
+    func now() -> Date { clock.now() }
+
     /// The server's name once known, else the pin's or result's.
     var name: String { info?.name ?? target.name }
 

@@ -53,6 +53,8 @@ final class NearbyModel: ObservableObject {
     }
 
     var departures: [NearbyDeparture] { result?.departures ?? [] }
+    /// The time rows are formatted against (the injected clock).
+    func now() -> Date { clock.now() }
     var stops: [DepartureStop] { result?.stops ?? [] }
     /// Whether the settle timer is running (a fetch will follow).
     var hasPendingFetch: Bool { settleTask != nil }
