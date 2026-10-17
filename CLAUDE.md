@@ -114,6 +114,10 @@ under two agencies, so route search results always show the operator name, and
 requests send `agency=` when it is known. A nil agency lets the server choose
 (most trips; for arrivals, an agency serving the stop).
 
+A timeline or stop view row (`NearbyDeparture.id`) is agency, route, direction and
+headsign: the server splits a Luas direction by destination, so two rows can share route
+and direction. A row opens route focus with its own headsign.
+
 ## Bundled data
 
 `Turas/Resources/` holds data pre-processed from the TFI static GTFS feed (the scripts
