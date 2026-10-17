@@ -62,12 +62,6 @@ final class NearbyModelsTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(\.id)).count, rows.count, "ForEach needs a distinct id per row")
     }
 
-    func testDepartureSourceIsLive() {
-        XCTAssertTrue(DepartureSource.live.isLive)
-        XCTAssertTrue(DepartureSource.realtime.isLive)
-        XCTAssertFalse(DepartureSource.timetable.isLive)
-    }
-
     func testTolerantDecoding() throws {
         // Lists are [] on the wire, but a null or missing list must not break
         // the timeline; an unknown source reads as timetable.

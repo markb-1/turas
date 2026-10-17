@@ -37,7 +37,7 @@ final class ThemeTests: XCTestCase {
 
     func testTimeColours() {
         XCTAssertEqual(Theme.timeColor(for: .live, cancelled: false), Theme.brand)
-        XCTAssertEqual(Theme.timeColor(for: .realtime, cancelled: false), Theme.brand)
+        XCTAssertEqual(Theme.timeColor(for: .realtime, cancelled: false), Theme.ink, "a prediction without a tracked vehicle is not live")
         XCTAssertEqual(Theme.timeColor(for: .timetable, cancelled: false), Theme.muted)
         XCTAssertEqual(Theme.timeColor(for: .live, cancelled: true), Theme.cancelled)
     }

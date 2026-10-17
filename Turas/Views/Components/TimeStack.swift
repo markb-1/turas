@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The first time large (brand when live, muted when timetable, struck
-/// through when cancelled, with a dot for live) and the next ones small,
+/// The first time large (brand with a dot when live, ink when realtime,
+/// muted when timetable, struck through when cancelled) and the next ones small,
 /// led by "3 min late" in the late colour when the first time is 2 or
 /// more minutes late. Later times that are cancelled are struck through too.
 struct TimeStack: View {

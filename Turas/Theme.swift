@@ -47,11 +47,16 @@ enum Theme {
         mode == .bus ? card : .white
     }
 
-    /// The first time's colour: brand when live or realtime, muted when
-    /// timetable-only, cancelled when cancelled.
+    /// The first time's colour: brand when live (a tracked vehicle), ink
+    /// when realtime (a prediction without one), muted when timetable-only,
+    /// cancelled when cancelled.
     static func timeColor(for source: DepartureSource, cancelled: Bool) -> Color {
         if cancelled { return Theme.cancelled }
-        return source.isLive ? brand : muted
+        switch source {
+        case .live: return brand
+        case .realtime: return ink
+        case .timetable: return muted
+        }
     }
 }
 
