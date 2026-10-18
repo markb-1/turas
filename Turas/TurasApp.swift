@@ -50,6 +50,10 @@ final class AppDependencies {
     let staticData: StaticDataStore
     let favourites: FavouritesStore
     let placeSearch: PlaceSearching
+    /// Learnt from the server's responses; `clock` applies it.
+    let clockOffset: ServerClockOffset
+    /// The models' clock: the device clock corrected by the server's.
+    let clock: AppClock
 
     init(config: ServerConfig, environment: [String: String] = ProcessInfo.processInfo.environment) {
         var session: URLSession?
@@ -60,9 +64,12 @@ final class AppDependencies {
             placeSearch = UITestStubPlaceSearch()
         }
         #endif
-        let serverService = TurasServerService(config: config, session: session)
+        let clockOffset = ServerClockOffset()
+        let serverService = TurasServerService(config: config, session: session, clockOffset: clockOffset)
         let routeStopService = RouteStopService()
         self.serverService = serverService
+        self.clockOffset = clockOffset
+        self.clock = .corrected(by: clockOffset)
         self.placeSearch = placeSearch
         self.locationService = LocationService()
         self.routeShapeService = RouteShapeService()
@@ -94,7 +101,8 @@ final class AppDependencies {
 
     /// The home screen's models, wired to the live services.
     func makeHomeModel() -> HomeModel {
-        let nearby = NearbyModel(source: serverService)
+        let clock = clock
+        let nearby = NearbyModel(source: serverService, clock: clock)
         let search = SearchModel(source: serverService, places: placeSearch)
         let stations = StationStore(source: serverService)
         let serverService = serverService
@@ -113,10 +121,10 @@ final class AppDependencies {
         return HomeModel(nearby: nearby, search: search, stations: stations, location: locationService, refreshRoutes: refreshRoutes, makeFocus: { target, centre, userLocation in
             RouteFocusModel(
                 target: target, centre: centre, userLocation: userLocation,
-                source: serverService, staticData: staticData, shapes: routeShapeService
+                source: serverService, staticData: staticData, shapes: routeShapeService, clock: clock
             )
         }, makeStop: { target, userLocation in
-            StopModel(target: target, userLocation: userLocation, source: serverService)
+            StopModel(target: target, userLocation: userLocation, source: serverService, clock: clock)
         })
     }
 }

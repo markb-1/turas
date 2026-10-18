@@ -18,7 +18,7 @@ final class StopModelsTests: XCTestCase {
 
         XCTAssertEqual(response.stop, StopInfo(id: "8220DB000400", name: "College Green", code: "400", lat: 53.3441, lon: -6.2595, modes: [.bus]))
         let row = try XCTUnwrap(response.departures.first)
-        XCTAssertEqual(row.id, "1|39A|0")
+        XCTAssertEqual(row.id, "1|39A|0|Ongar")
         XCTAssertEqual(row.stopId, "8220DB000400")
         XCTAssertEqual(row.distanceM, 0)
         XCTAssertEqual(row.firstTime?.at, ServerJSON.parseDate("2026-10-12T18:52:00Z"), "the +01:00 offset is applied")

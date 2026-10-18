@@ -4,8 +4,10 @@ import MapKit
 
 /// Canned answers for the UI smoke test (launched with TURAS_UITEST_STUB=1),
 /// so it runs the same on CI without a server. Times are built from the
-/// current date so rows look live. Only the paths the home screen uses are
-/// known; anything else is a 404.
+/// current date so rows look live. Between them, the bus timeline and the
+/// College Green stop view show every time style: live and realtime (each
+/// late and on time), timetable and cancelled. Only the paths the home
+/// screen uses are known; anything else is a 404.
 enum UITestStubServer {
     static func session() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -48,8 +50,10 @@ enum UITestStubServer {
         formatter.string(from: Date().addingTimeInterval(TimeInterval(minutes * 60)))
     }
 
-    private static func time(_ minutes: Int, source: String = "live", cancelled: Bool = false) -> String {
-        #"{"trip_id": "stub-\#(minutes)", "at": "\#(at(minutes))", "delay": 0, "source": "\#(source)", "cancelled": \#(cancelled)}"#
+    /// `delay` is in seconds; 120 or more on a live or realtime first time
+    /// shows the late note.
+    private static func time(_ minutes: Int, source: String = "live", delay: Int = 0, cancelled: Bool = false) -> String {
+        #"{"trip_id": "stub-\#(minutes)", "at": "\#(at(minutes))", "delay": \#(delay), "source": "\#(source)", "cancelled": \#(cancelled)}"#
     }
 
     private static func nearby(mode: String) -> String {
@@ -73,7 +77,9 @@ enum UITestStubServer {
                        {"id": "8220DB000401", "name": "Dame Street", "lat": 53.3439, "lon": -6.2630, "distance_m": 230}],
              "departures": [
                {"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 90,
-                "times": [\(time(2)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
+                "times": [\(time(2, delay: 180)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
+               {"route": "15", "agency_id": "1", "direction": 0, "headsign": "Clongriffin", "stop_id": "8220DB000400", "distance_m": 90,
+                "times": [\(time(4, source: "realtime")), \(time(16, source: "realtime")), \(time(31, source: "timetable"))]},
                {"route": "16", "agency_id": "1", "direction": 1, "headsign": "Ballinteer", "stop_id": "8220DB000401", "distance_m": 230,
                 "times": [\(time(5, source: "realtime", cancelled: true)), \(time(19, cancelled: true))]},
                {"route": "46A", "agency_id": "1", "direction": 0, "stop_id": "8220DB000400", "distance_m": 90,
@@ -156,7 +162,9 @@ enum UITestStubServer {
             {"stop": \(stop("8220DB000400", "College Green", code: "400", lat: 53.3441, lon: -6.2595, mode: "bus")),
              "departures": [
                {"route": "39A", "agency_id": "1", "direction": 0, "headsign": "Ongar", "stop_id": "8220DB000400", "distance_m": 0,
-                "times": [\(time(2)), \(time(14, source: "realtime")), \(time(27, source: "timetable"))]},
+                "times": [\(time(2, delay: 180)), \(time(14, source: "realtime")), \(time(27, source: "timetable", cancelled: true))]},
+               {"route": "15", "agency_id": "1", "direction": 0, "headsign": "Clongriffin", "stop_id": "8220DB000400", "distance_m": 0,
+                "times": [\(time(6, source: "realtime", delay: 300)), \(time(18, source: "realtime"))]},
                {"route": "46A", "agency_id": "1", "direction": 0, "headsign": "Dún Laoghaire", "stop_id": "8220DB000400", "distance_m": 0,
                 "times": [\(time(8, source: "timetable"))]}
              ]}

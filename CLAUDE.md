@@ -56,7 +56,8 @@ Turas/
     PlaceSearchService      PlaceSearching; MapKitPlaceSearch (MKLocalSearch) limited to Ireland,
                             addresses and points of interest as two requests
     LocationService         @MainActor CLLocationManager wrapper; LocationProviding
-    AppClock                now + sleep, injected into the models
+    AppClock                now + sleep, injected into the models; ServerClockOffset
+                            (server Date header minus device clock) corrects `now`
     FavouritesStore         @MainActor recents and starred routes (no UI yet)
     StationStore            @MainActor Luas and train station lists from /stations, one fetch per mode per session
   ViewModels/               HomeModel, NearbyModel, SearchModel, StopModel, RouteFocusModel (all @MainActor)
@@ -100,9 +101,25 @@ or `.focus(RouteFocusTarget)`.
   follows each new fix) and route focus's walking time use it only while authorised.
 - Errors keep the last rows with "Updated N min ago" and Retry; 503 shows "Turas is
   starting up…" and retries; 429 retries silently on the next tick.
+- Each render drops times more than 30 s past (`Upcoming`) in the timeline, stop view and
+  route focus, hides rows with none left and re-sorts by the new first time, so kept rows
+  never turn into a column of "Due".
 - Search stop rows show their modes and distance from the map centre ("Bus · 1.2 km"),
   which tells same-name stops apart.
-- Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep.
+- A first time is brand with a dot when `live` (a tracked vehicle), ink when `realtime`
+  (a trip-update prediction, no vehicle) and muted when `timetable`; VoiceOver says
+  "Live", "Estimated" or "Scheduled" (`Theme.timeColor`, `TimeStack`).
+- A realtime or live first time 2 or more minutes late shows "3 min late" in `Theme.late`
+  ahead of the later times (timeline and stop view), and its VoiceOver label says so. Route
+  focus uses the same rule and text under each arrival's destination.
+- `testTimeStylesInLightAndDark` attaches the timeline, stop view and route focus in light
+  and dark; the stub's bus rows cover live, realtime, late, timetable and cancelled times.
+- Shown times re-format every 5 s (`DepartureFormatting.tick`) against the model's
+  clock (`now()`), not the `TimelineView` date, so fresh rows are never formatted late.
+- Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep. The
+  app's models use `AppClock.corrected(by:)`: `TurasServerService` records each 200
+  response's `Date` header in `ServerClockOffset` (median of the last 5), and an offset
+  over 30 s is added to the device clock. Tests default to `.system` and no offset.
 
 ### Route identity
 
@@ -113,6 +130,10 @@ route_id. Bundled routes carry no agency. Short names (220, 120, 73, W4, ...) ca
 under two agencies, so route search results always show the operator name, and
 requests send `agency=` when it is known. A nil agency lets the server choose
 (most trips; for arrivals, an agency serving the stop).
+
+A timeline or stop view row (`NearbyDeparture.id`) is agency, route, direction and
+headsign: the server splits a Luas direction by destination, so two rows can share route
+and direction. A row opens route focus with its own headsign.
 
 ## Bundled data
 

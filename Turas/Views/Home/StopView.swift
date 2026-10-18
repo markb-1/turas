@@ -16,21 +16,22 @@ struct StopView: View {
                 .padding(.horizontal, Theme.gutter)
             ScrollView {
                 LazyVStack(spacing: Theme.cardSpacing) {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        ForEach(stop.departures) { departure in
+                    TimelineView(.periodic(from: .now, by: DepartureFormatting.tick)) { _ in
+                        let now = stop.now()
+                        ForEach(Upcoming.departures(stop.departures, now: now)) { departure in
                             Button {
                                 onSelect(departure)
                             } label: {
                                 DepartureCard(departure: departure, stopName: nil, mode: stop.target.mode,
-                                              now: context.date, identifierPrefix: "stop.row")
+                                              now: now, identifierPrefix: "stop.row")
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("stop.row.\(departure.id)")
                         }
                     }
                     if let lastUpdated = stop.lastUpdated, Self.showsUpdatedFooter(for: stop.status) {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(ArrivalFormatting.updatedText(since: lastUpdated, now: context.date))
+                        TimelineView(.periodic(from: .now, by: 1)) { _ in
+                            Text(ArrivalFormatting.updatedText(since: lastUpdated, now: stop.now()))
                                 .font(.caption)
                                 .foregroundStyle(Theme.muted)
                         }
@@ -105,8 +106,8 @@ struct StopView: View {
             StatusBanner(kind: .info, message: StopModel.goneMessage)
         case .failed(let message):
             if let lastUpdated = stop.lastUpdated {
-                TimelineView(.periodic(from: .now, by: 10)) { context in
-                    StatusBanner(kind: .warning, message: ArrivalFormatting.updatedText(since: lastUpdated, now: context.date),
+                TimelineView(.periodic(from: .now, by: 10)) { _ in
+                    StatusBanner(kind: .warning, message: ArrivalFormatting.updatedText(since: lastUpdated, now: stop.now()),
                                  actionTitle: "Retry", action: stop.retry)
                 }
             } else {

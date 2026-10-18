@@ -31,6 +31,8 @@ final class ComponentRenderTests: XCTestCase {
         render(RouteBadge(route: "Green", mode: .luas))
         render(TimeStack(times: departure.times, now: now))
         render(TimeStack(times: [], now: now))
+        let late = DepartureTime(tripId: "l", at: now.addingTimeInterval(120), delay: 240, source: .realtime, cancelled: false)
+        render(TimeStack(times: [late], now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now).dynamicTypeSize(.accessibility5))
         render(DepartureCard(departure: departure, stopName: nil, mode: .bus, now: now, identifierPrefix: "stop.row"))

@@ -22,13 +22,13 @@ final class StubURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
-        let (statusCode, body) = StubURLProtocol.stub.respond(to: request)
+        let (statusCode, body, headers) = StubURLProtocol.stub.respond(to: request)
         guard let url = request.url,
               let response = HTTPURLResponse(
                 url: url,
                 statusCode: statusCode,
                 httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "application/json"]
+                headerFields: headers.merging(["Content-Type": "application/json"]) { stub, _ in stub }
               ) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
@@ -46,21 +46,23 @@ final class StubResponses: @unchecked Sendable {
     private let lock = NSLock()
     private var statusCode = 200
     private var body = Data("[]".utf8)
+    private var headers: [String: String] = [:]
     private var requests: [URLRequest] = []
 
-    func set(statusCode: Int = 200, body: Data) {
+    func set(statusCode: Int = 200, body: Data, headers: [String: String] = [:]) {
         lock.lock()
         defer { lock.unlock() }
         self.statusCode = statusCode
         self.body = body
+        self.headers = headers
         self.requests = []
     }
 
-    func respond(to request: URLRequest) -> (Int, Data) {
+    func respond(to request: URLRequest) -> (Int, Data, [String: String]) {
         lock.lock()
         defer { lock.unlock() }
         requests.append(request)
-        return (statusCode, body)
+        return (statusCode, body, headers)
     }
 
     var recordedRequests: [URLRequest] {

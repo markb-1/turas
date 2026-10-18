@@ -17,8 +17,8 @@ struct RouteFocusView: View {
                 LazyVStack(spacing: Theme.cardSpacing) {
                     arrivalsSection
                     if let lastUpdated = focus.lastUpdated {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(ArrivalFormatting.updatedText(since: lastUpdated, now: context.date))
+                        TimelineView(.periodic(from: .now, by: 1)) { _ in
+                            Text(ArrivalFormatting.updatedText(since: lastUpdated, now: focus.now()))
                                 .font(.caption)
                                 .foregroundStyle(Theme.muted)
                         }
@@ -91,9 +91,10 @@ struct RouteFocusView: View {
             StatusBanner(kind: focus.errorMessage == nil ? .info : .warning,
                          message: focus.errorMessage ?? "No upcoming times at this stop.")
         } else {
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                ForEach(focus.arrivals.prefix(6)) { arrival in
-                    arrivalRow(arrival, now: context.date)
+            TimelineView(.periodic(from: .now, by: DepartureFormatting.tick)) { _ in
+                let now = focus.now()
+                ForEach(Upcoming.arrivals(focus.arrivals, now: now).prefix(6)) { arrival in
+                    arrivalRow(arrival, now: now)
                 }
             }
             if let errorMessage = focus.errorMessage {
@@ -118,8 +119,8 @@ struct RouteFocusView: View {
                     Text("Cancelled")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.cancelled)
-                } else if arrival.delay > 60 {
-                    Text("+\(arrival.delay / 60) min late")
+                } else if arrival.delay >= DepartureFormatting.lateThreshold {
+                    Text(DepartureFormatting.lateText(minutes: arrival.delay / 60))
                         .font(.caption)
                         .foregroundStyle(Theme.late)
                 }

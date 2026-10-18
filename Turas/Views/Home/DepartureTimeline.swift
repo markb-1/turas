@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The "leaving soonest" list for one mode, with the status banner above
-/// it. Minute texts tick every 30 s.
+/// it. Minute texts tick every 5 s against the model's clock, and times
+/// that have left drop out (`Upcoming`), so kept rows never pile up as "Due".
 struct DepartureTimeline: View {
     @ObservedObject var nearby: NearbyModel
     let mode: TransportMode
@@ -19,9 +20,10 @@ struct DepartureTimeline: View {
             banner
                 .padding(.horizontal, Theme.gutter)
             ScrollView {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
+                TimelineView(.periodic(from: .now, by: DepartureFormatting.tick)) { _ in
+                    let now = nearby.now()
                     LazyVStack(spacing: Theme.cardSpacing) {
-                        ForEach(nearby.departures) { departure in
+                        ForEach(Upcoming.departures(nearby.departures, now: now)) { departure in
                             Button {
                                 onSelect(departure)
                             } label: {
@@ -29,7 +31,7 @@ struct DepartureTimeline: View {
                                     departure: departure,
                                     stopName: nearby.result?.stop(withId: departure.stopId)?.name ?? "",
                                     mode: mode,
-                                    now: context.date
+                                    now: now
                                 )
                             }
                             .buttonStyle(.plain)
@@ -59,8 +61,8 @@ struct DepartureTimeline: View {
             StatusBanner(kind: .info, message: Self.emptyMessage(for: mode))
         case .failed(let message):
             if let lastUpdated = nearby.lastUpdated {
-                TimelineView(.periodic(from: .now, by: 10)) { context in
-                    StatusBanner(kind: .warning, message: ArrivalFormatting.updatedText(since: lastUpdated, now: context.date),
+                TimelineView(.periodic(from: .now, by: 10)) { _ in
+                    StatusBanner(kind: .warning, message: ArrivalFormatting.updatedText(since: lastUpdated, now: nearby.now()),
                                  actionTitle: "Retry", action: onRetry)
                 }
             } else {

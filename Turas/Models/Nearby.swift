@@ -51,8 +51,9 @@ struct DepartureStop: Decodable, Identifiable, Hashable, Sendable {
     }
 }
 
-/// One timeline row: a route and direction, from the nearest stop that has
-/// a departure in the window, with its next (up to three) times.
+/// One timeline row: a route and direction (for the Luas, also a
+/// destination), from the nearest stop that has a departure in the window,
+/// with its next (up to three) times.
 struct NearbyDeparture: Decodable, Identifiable, Hashable, Sendable {
     let route: String
     let agencyId: String
@@ -63,8 +64,9 @@ struct NearbyDeparture: Decodable, Identifiable, Hashable, Sendable {
     let distanceM: Int
     let times: [DepartureTime]
 
-    /// One row per (route, agency, direction), so that is the identity.
-    var id: String { "\(agencyId)|\(route)|\(direction)" }
+    /// One row per (route, agency, direction, headsign): the Luas splits a
+    /// direction by destination, so two rows can differ only in headsign.
+    var id: String { "\(agencyId)|\(route)|\(direction)|\(headsign ?? "")" }
     var routeRef: RouteRef { RouteRef(name: route, agencyId: agencyId) }
     var firstTime: DepartureTime? { times.first }
 
@@ -83,17 +85,15 @@ struct NearbyDeparture: Decodable, Identifiable, Hashable, Sendable {
     }
 }
 
-/// Where a departure time came from. Live and realtime are shown in the
-/// brand colour; timetable-only times are muted.
+/// Where a departure time came from. Live is shown in the brand colour
+/// with a dot, realtime in ink without one, and timetable-only muted.
 enum DepartureSource: String, Decodable, Sendable {
-    /// A vehicle is reporting for the trip (or a Luas forecast).
+    /// A realtime prediction with a tracked vehicle (or a Luas forecast).
     case live
-    /// A trip update exists but no vehicle reports.
+    /// A prediction from trip updates, with no vehicle tracked.
     case realtime
     /// Scheduled time only.
     case timetable
-
-    var isLive: Bool { self != .timetable }
 }
 
 /// One departure time of a trip at a stop.

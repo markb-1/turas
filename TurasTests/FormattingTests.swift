@@ -6,7 +6,8 @@ final class FormattingTests: XCTestCase {
 
     func testMinutesText() {
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(30), now: now), "Due")
-        XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(-90), now: now), "Due")
+        // The oldest time still shown (Upcoming drops anything older).
+        XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(-30), now: now), "Due")
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(65), now: now), "1 min")
         XCTAssertEqual(ArrivalFormatting.minutesText(until: now.addingTimeInterval(12 * 60 + 5), now: now), "12 mins")
     }
@@ -50,6 +51,8 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 5 * 60 + 10), now: now), "To Ongar, in 5 minutes, live")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 70, live: false), now: now), "To Ongar, in 1 minute, scheduled")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 20, delay: 180), now: now), "To Ongar, due now, live, 3 minutes late")
+        XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, delay: 90), now: now), "To Ongar, in 10 minutes, live",
+                       "under 2 minutes late is not mentioned, as in the timeline")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, cancelled: true), now: now), "To Ongar, cancelled")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, headsign: nil), now: now), "in 10 minutes, live")
     }
@@ -58,7 +61,7 @@ final class FormattingTests: XCTestCase {
 
     func testFirstTimeText() {
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(30), now: now), "Due")
-        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(-60), now: now), "Due")
+        XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(-30), now: now), "Due")
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(90), now: now), "1 min")
         XCTAssertEqual(DepartureFormatting.firstTimeText(at: now.addingTimeInterval(14 * 60 + 20), now: now), "14 min")
     }
@@ -67,6 +70,70 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(20), now: now), "Due")
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(14 * 60), now: now), "14")
         XCTAssertEqual(DepartureFormatting.laterTimeText(at: now.addingTimeInterval(27 * 60 + 59), now: now), "27")
+    }
+
+    // MARK: - Upcoming
+
+    private func time(_ seconds: TimeInterval, _ trip: String = "t") -> DepartureTime {
+        DepartureTime(tripId: trip, at: now.addingTimeInterval(seconds), delay: 0, source: .live, cancelled: false)
+    }
+
+    private func row(_ headsign: String, _ times: [DepartureTime]) -> NearbyDeparture {
+        NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: headsign, stopId: "S", distanceM: 90, times: times)
+    }
+
+    func testUpcomingKeepsTimesUpTo30SecondsPast() {
+        XCTAssertTrue(Upcoming.isUpcoming(now.addingTimeInterval(-30), now: now))
+        XCTAssertFalse(Upcoming.isUpcoming(now.addingTimeInterval(-31), now: now))
+        XCTAssertTrue(Upcoming.isUpcoming(now.addingTimeInterval(600), now: now))
+    }
+
+    func testUpcomingDeparturesDropDepartedTimesAndEmptyRows() {
+        let rows = [
+            row("Ongar", [time(-90, "gone"), time(-20, "due"), time(600, "later")]),
+            row("Gone", [time(-45), time(-31)]),
+            row("Empty", []),
+        ]
+        let upcoming = Upcoming.departures(rows, now: now)
+        XCTAssertEqual(upcoming.map(\.headsign), ["Ongar"], "rows with no times left are hidden")
+        XCTAssertEqual(upcoming.first?.times.map(\.tripId), ["due", "later"])
+        XCTAssertEqual(upcoming.first?.id, rows[0].id, "the row keeps its identity")
+    }
+
+    func testUpcomingDeparturesResortByTheNewFirstTime() {
+        let rows = [
+            row("A", [time(-60), time(12 * 60)]),
+            row("B", [time(3 * 60)]),
+            row("C", [time(3 * 60)]),
+        ]
+        XCTAssertEqual(Upcoming.departures(rows, now: now).map(\.headsign), ["B", "C", "A"], "stable for equal first times")
+    }
+
+    func testUpcomingArrivals() {
+        func arrival(_ id: String, in seconds: TimeInterval) -> StopArrival {
+            StopArrival(id: id, routeId: "39A", headsign: nil, delay: 0, predictedArrival: now.addingTimeInterval(seconds), isLive: true, isCancelled: false)
+        }
+        let arrivals = [arrival("gone", in: -31), arrival("due", in: -30), arrival("later", in: 300)]
+        XCTAssertEqual(Upcoming.arrivals(arrivals, now: now).map(\.id), ["due", "later"])
+    }
+
+    func testCountdownsTickWellUnderAMinute() {
+        // A shown time lags the clock by at most one tick.
+        XCTAssertLessThanOrEqual(DepartureFormatting.tick, 10)
+        XCTAssertGreaterThanOrEqual(DepartureFormatting.tick, 5)
+    }
+
+    func testLateMinutes() {
+        func time(delay: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
+            DepartureTime(tripId: "t", at: now, delay: delay, source: source, cancelled: cancelled)
+        }
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 119)), "under 2 minutes is on time")
+        XCTAssertEqual(DepartureFormatting.lateMinutes(time(delay: 120)), 2)
+        XCTAssertEqual(DepartureFormatting.lateMinutes(time(delay: 239, source: .realtime)), 3, "whole minutes, rounded down")
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 600, source: .timetable)), "a timetable time has no delay to show")
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: 600, cancelled: true)))
+        XCTAssertNil(DepartureFormatting.lateMinutes(time(delay: -300)), "early is not late")
+        XCTAssertEqual(DepartureFormatting.lateText(minutes: 3), "3 min late")
     }
 
     func testDistanceAndWalkText() {
@@ -79,8 +146,8 @@ final class FormattingTests: XCTestCase {
     }
 
     func testDepartureLabel() {
-        func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false) -> DepartureTime {
-            DepartureTime(tripId: "t\(minutes)", at: now.addingTimeInterval(TimeInterval(minutes * 60)), delay: 0, source: source, cancelled: cancelled)
+        func time(_ minutes: Int, source: DepartureSource = .live, cancelled: Bool = false, delay: Int = 0) -> DepartureTime {
+            DepartureTime(tripId: "t\(minutes)", at: now.addingTimeInterval(TimeInterval(minutes * 60)), delay: delay, source: source, cancelled: cancelled)
         }
         func row(_ times: [DepartureTime], distance: Int = 90) -> NearbyDeparture {
             NearbyDeparture(route: "39A", agencyId: "1", direction: 0, headsign: "Ongar", stopId: "S", distanceM: distance, times: times)
@@ -113,6 +180,24 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(
             AccessibilityText.departure(row([]), stopName: "College Green", now: now),
             "39A to Ongar from College Green, 90 metres. No times."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(2, delay: 200), time(14, delay: 600)]), stopName: "College Green", now: now),
+            "39A to Ongar from College Green, 90 metres. Live, 2 minutes, 3 minutes late, then 14 minutes.",
+            "only the first time's delay is spoken"
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(0, source: .realtime, delay: 60)]), stopName: nil, now: now),
+            "39A to Ongar. Estimated, due now.",
+            "under 2 minutes late is not mentioned"
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(4, source: .realtime, delay: 120)]), stopName: nil, now: now),
+            "39A to Ongar. Estimated, 4 minutes, 2 minutes late."
+        )
+        XCTAssertEqual(
+            AccessibilityText.departure(row([time(4, source: .timetable, delay: 300)]), stopName: nil, now: now),
+            "39A to Ongar. Scheduled, 4 minutes."
         )
         let noHeadsign = NearbyDeparture(route: "Green", agencyId: "10000", direction: 1, headsign: nil, stopId: "L", distanceM: 40, times: [time(3)])
         XCTAssertEqual(

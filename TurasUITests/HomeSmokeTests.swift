@@ -255,6 +255,43 @@ final class HomeSmokeTests: XCTestCase {
         _ = firstRow()
     }
 
+    /// Every time style on screen in light and dark: the bus timeline and the
+    /// College Green stop view (live late, realtime on time and late,
+    /// timetable, cancelled first and later times), then 39A's route focus.
+    /// Stub only: the live server has no guaranteed late or realtime rows.
+    func testTimeStylesInLightAndDark() throws {
+        try XCTSkipIf(live, "needs the stub's late and realtime rows")
+        defer { XCUIDevice.shared.appearance = .light } // the simulator default; .unspecified is refused
+
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            let suffix = appearance == .dark ? "dark" : "light"
+            XCUIDevice.shared.appearance = appearance
+            app.launch()
+            grantLocationIfAsked()
+
+            _ = firstRow()
+            let late = element("timeline.row.1|39A|0|Ongar")
+            // Minutes count down while the test runs, so only the source and the delay are checked.
+            XCTAssertTrue(late.label.contains("Live, ") && late.label.contains(", 3 minutes late"), late.label)
+            let estimated = element("timeline.row.1|15|0|Clongriffin")
+            XCTAssertTrue(estimated.label.contains("Estimated, ") && !estimated.label.contains("late"), estimated.label)
+            snapshot("styles-timeline-\(suffix)")
+
+            search("College Green")
+            firstMatch(prefix: "search.stop.").tap()
+            XCTAssertTrue(stopRows.firstMatch.waitForExistence(timeout: timeout))
+            let stopLate = element("stop.row.1|15|0|Clongriffin")
+            XCTAssertTrue(stopLate.label.contains("Estimated, ") && stopLate.label.contains(", 5 minutes late"), stopLate.label)
+            snapshot("styles-stop-\(suffix)")
+
+            element("stop.row.1|39A|0|Ongar").tap()
+            XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
+            XCTAssertTrue(firstMatch(prefix: "focus.arrival.").exists)
+            snapshot("styles-focus-\(suffix)")
+            app.terminate()
+        }
+    }
+
     func testTimelineAtAccessibilityTextSize() {
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXL"]
         app.launch()

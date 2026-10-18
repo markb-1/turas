@@ -26,6 +26,13 @@ final class StopModelTests: XCTestCase {
         }
     }
 
+    func testNowIsTheInjectedClock() {
+        let model = makeModel(source: FakeStopSource())
+        XCTAssertEqual(model.now(), clock.now)
+        clock.advance(by: 7)
+        XCTAssertEqual(model.now(), clock.now)
+    }
+
     // MARK: - Loading and refreshing
 
     func testStartFetchesThenRefreshesEvery30Seconds() async {

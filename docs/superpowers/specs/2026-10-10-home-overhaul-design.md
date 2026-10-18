@@ -220,8 +220,8 @@ once unused.
 | `ink` | `#0F2A24` | `#E8F0ED` |
 | `surface` | `#F6F8F7` | `#0E1513` |
 | `card` | `#FFFFFF` | `#17211E` |
-| `muted` | `#6B7D78` | `#8FA39D` |
-| `late` | `#B86E00` | `#F0A93B` |
+| `muted` | `#5F716C` | `#8FA39D` |
+| `late` | `#9C5F00` | `#F0A93B` |
 | `cancelled` | `#B3261E` | `#F2867E` |
 
 - **Badges:** pill shape.

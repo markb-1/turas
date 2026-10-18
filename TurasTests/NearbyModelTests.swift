@@ -30,6 +30,15 @@ final class NearbyModelTests: XCTestCase {
         CLLocationCoordinate2D(latitude: origin.latitude + metresNorth / 111_195, longitude: origin.longitude)
     }
 
+    // MARK: - Clock
+
+    func testNowIsTheInjectedClock() {
+        let model = makeModel(source: FakeNearbySource())
+        XCTAssertEqual(model.now(), clock.now)
+        clock.advance(by: 7)
+        XCTAssertEqual(model.now(), clock.now, "rows format against the clock, not a stale timeline date")
+    }
+
     // MARK: - Settling
 
     func testRapidPanningFetchesOnlyTheFinalCentre() async {
