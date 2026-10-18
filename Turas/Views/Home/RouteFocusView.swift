@@ -119,8 +119,8 @@ struct RouteFocusView: View {
                     Text("Cancelled")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.cancelled)
-                } else if arrival.delay > 60 {
-                    Text("+\(arrival.delay / 60) min late")
+                } else if arrival.delay >= DepartureFormatting.lateThreshold {
+                    Text(DepartureFormatting.lateText(minutes: arrival.delay / 60))
                         .font(.caption)
                         .foregroundStyle(Theme.late)
                 }

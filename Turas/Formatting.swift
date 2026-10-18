@@ -186,9 +186,8 @@ enum AccessibilityText {
             parts.append(minutes == 1 ? "in 1 minute" : "in \(minutes) minutes")
         }
         parts.append(arrival.isLive ? "live" : "scheduled")
-        if arrival.delay > 60 {
-            let late = arrival.delay / 60
-            parts.append(late == 1 ? "1 minute late" : "\(late) minutes late")
+        if arrival.delay >= DepartureFormatting.lateThreshold {
+            parts.append("\(arrival.delay / 60) minutes late") // at least 2, as in the timeline
         }
         return parts.joined(separator: ", ")
     }

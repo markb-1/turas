@@ -51,6 +51,8 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 5 * 60 + 10), now: now), "To Ongar, in 5 minutes, live")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 70, live: false), now: now), "To Ongar, in 1 minute, scheduled")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 20, delay: 180), now: now), "To Ongar, due now, live, 3 minutes late")
+        XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, delay: 90), now: now), "To Ongar, in 10 minutes, live",
+                       "under 2 minutes late is not mentioned, as in the timeline")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, cancelled: true), now: now), "To Ongar, cancelled")
         XCTAssertEqual(AccessibilityText.arrival(arrival(in: 600, headsign: nil), now: now), "in 10 minutes, live")
     }

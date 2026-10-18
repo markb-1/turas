@@ -110,7 +110,10 @@ or `.focus(RouteFocusTarget)`.
   (a trip-update prediction, no vehicle) and muted when `timetable`; VoiceOver says
   "Live", "Estimated" or "Scheduled" (`Theme.timeColor`, `TimeStack`).
 - A realtime or live first time 2 or more minutes late shows "3 min late" in `Theme.late`
-  ahead of the later times (timeline and stop view), and its VoiceOver label says so.
+  ahead of the later times (timeline and stop view), and its VoiceOver label says so. Route
+  focus uses the same rule and text under each arrival's destination.
+- `testTimeStylesInLightAndDark` attaches the timeline, stop view and route focus in light
+  and dark; the stub's bus rows cover live, realtime, late, timetable and cancelled times.
 - Shown times re-format every 5 s (`DepartureFormatting.tick`) against the model's
   clock (`now()`), not the `TimelineView` date, so fresh rows are never formatted late.
 - Time is injected (`AppClock`); tests drive it with `ManualClock` and never sleep. The
