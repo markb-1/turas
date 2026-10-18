@@ -152,4 +152,56 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertNil(response.routes[1].agencyName)
         XCTAssertEqual(response.routes[1].operatorLabel, "Operator 5401")
     }
+
+    func testDepartures() throws {
+        let response = try ServerJSON.decoder.decode(StopDepartures.self, from: Fixture.data("departures"))
+
+        // Structure the app relies on.
+        XCTAssertFalse(response.departures.isEmpty)
+        XCTAssertFalse(response.stop.modes.isEmpty, "the stop lists the modes of its routes")
+        for departure in response.departures {
+            XCTAssertEqual(departure.stopId, response.stop.id, "every row is at the requested stop")
+            XCTAssertEqual(departure.distanceM, 0)
+            XCTAssertLessThanOrEqual(departure.times.count, 3)
+            XCTAssertEqual(departure.times.map(\.at), departure.times.map(\.at).sorted(), "times ascend")
+        }
+        XCTAssertEqual(response.departures.map { $0.times.first?.at ?? .distantFuture },
+                       response.departures.map { $0.times.first?.at ?? .distantFuture }.sorted(), "rows sort by first time")
+
+        // Values from the server's fixture.
+        XCTAssertEqual(response.stop.id, "8220DB000400")
+        XCTAssertEqual(response.stop.name, "College Green")
+        XCTAssertEqual(response.stop.code, "400")
+        XCTAssertEqual(response.stop.lat, 53.3441, accuracy: 1e-9)
+        XCTAssertEqual(response.stop.lon, -6.2595, accuracy: 1e-9)
+        XCTAssertEqual(response.stop.modes, [.bus])
+        let first = try XCTUnwrap(response.departures.first)
+        XCTAssertEqual(first.route, "39A")
+        XCTAssertEqual(first.direction, 0)
+        XCTAssertEqual(first.headsign, "Ongar")
+        let time = try XCTUnwrap(first.times.first)
+        XCTAssertEqual(time.delay, 120)
+        XCTAssertEqual(time.source, .live)
+        XCTAssertFalse(time.cancelled)
+        XCTAssertEqual(first.times.map(\.source), [.live, .realtime, .timetable])
+        XCTAssertEqual(first.times.map(\.cancelled), [false, false, true])
+        XCTAssertNil(response.departures[1].headsign)
+    }
+
+    func testStations() throws {
+        let stations = try ServerJSON.decoder.decode([Station].self, from: Fixture.data("stations"))
+
+        XCTAssertFalse(stations.isEmpty)
+        XCTAssertEqual(Set(stations.map(\.id)).count, stations.count, "one entry per station")
+        for station in stations {
+            XCTAssertFalse(station.name.isEmpty)
+            XCTAssertTrue((51.3...55.5).contains(station.lat) && (-10.8...(-5.3)).contains(station.lon), "in Ireland: \(station.name)")
+        }
+
+        // Values from the server's fixture.
+        let dawson = try XCTUnwrap(stations.first { $0.name == "Dawson" })
+        XCTAssertEqual(dawson.id, "8250GA00317")
+        XCTAssertEqual(dawson.lat, 53.3402, accuracy: 1e-9)
+        XCTAssertEqual(dawson.lon, -6.2588, accuracy: 1e-9)
+    }
 }

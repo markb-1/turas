@@ -4,13 +4,14 @@ import SwiftUI
 /// colours, and card metrics. Views take colours from here, never literals.
 enum Theme {
     // MARK: - Tokens (Assets.xcassets, light / dark)
+    // Muted and late are caption text, so each keeps 4.5:1 on card and surface.
 
     static let brand = Color("Brand")           // #007A6C / #2BB3A0
     static let ink = Color("Ink")               // #0F2A24 / #E8F0ED
     static let surface = Color("Surface")       // #F6F8F7 / #0E1513
     static let card = Color("Card")             // #FFFFFF / #17211E
-    static let muted = Color("Muted")           // #6B7D78 / #8FA39D
-    static let late = Color("Late")             // #B86E00 / #F0A93B
+    static let muted = Color("Muted")           // #5F716C / #8FA39D
+    static let late = Color("Late")             // #9C5F00 / #F0A93B
     static let cancelled = Color("Cancelled")   // #B3261E / #F2867E
 
     // MARK: - Line colours (same in both appearances)
@@ -47,11 +48,16 @@ enum Theme {
         mode == .bus ? card : .white
     }
 
-    /// The first time's colour: brand when live or realtime, muted when
-    /// timetable-only, cancelled when cancelled.
+    /// The first time's colour: brand when live (a tracked vehicle), ink
+    /// when realtime (a prediction without one), muted when timetable-only,
+    /// cancelled when cancelled.
     static func timeColor(for source: DepartureSource, cancelled: Bool) -> Color {
         if cancelled { return Theme.cancelled }
-        return source.isLive ? brand : muted
+        switch source {
+        case .live: return brand
+        case .realtime: return ink
+        case .timetable: return muted
+        }
     }
 }
 

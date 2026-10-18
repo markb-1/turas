@@ -2,18 +2,39 @@ import Foundation
 
 /// Text for timeline rows.
 enum DepartureFormatting {
+    /// How often the views re-format shown times, in seconds: a countdown
+    /// lags the clock by at most this. Each tick reads the model's clock, so
+    /// freshly polled rows are formatted against the current time too.
+    static let tick: TimeInterval = 5
+
     /// The big first time: "Due", "1 min", "14 min".
-    static func firstTimeText(at date: Date, now: Date = Date()) -> String {
+    static func firstTimeText(at date: Date, now: Date) -> String {
         let minutes = wholeMinutes(until: date, now: now)
         if minutes < 1 { return "Due" }
         return "\(minutes) min"
     }
 
     /// Later times are just the minutes: "14", "27"; "Due" under a minute.
-    static func laterTimeText(at date: Date, now: Date = Date()) -> String {
+    static func laterTimeText(at date: Date, now: Date) -> String {
         let minutes = wholeMinutes(until: date, now: now)
         if minutes < 1 { return "Due" }
         return "\(minutes)"
+    }
+
+    /// A realtime or live time at least this many seconds late shows it.
+    static let lateThreshold = 120
+
+    /// Whole minutes late, rounded down, for a realtime or live time at
+    /// least 2 minutes late; nil when on time, early, cancelled or
+    /// timetable-only (a scheduled time has no delay to report).
+    static func lateMinutes(_ time: DepartureTime) -> Int? {
+        guard !time.cancelled, time.source != .timetable, time.delay >= lateThreshold else { return nil }
+        return time.delay / 60
+    }
+
+    /// "3 min late".
+    static func lateText(minutes: Int) -> String {
+        "\(minutes) min late"
     }
 
     /// "90 m" or "1.3 km".
@@ -35,6 +56,37 @@ enum DepartureFormatting {
 
     static func wholeMinutes(until date: Date, now: Date) -> Int {
         Int(date.timeIntervalSince(now) / 60)
+    }
+}
+
+/// The times worth showing at a moment. The server can send a realtime or
+/// live time up to a minute in the past, and rows kept after a failed
+/// refresh age, so each render drops what has left.
+enum Upcoming {
+    /// A time further in the past than this has left.
+    static let grace: TimeInterval = 30
+
+    static func isUpcoming(_ date: Date, now: Date) -> Bool {
+        date.timeIntervalSince(now) >= -grace
+    }
+
+    /// Each row without its departed times, rows with none left hidden,
+    /// re-sorted by the first remaining time (stable, as the server sends them).
+    static func departures(_ rows: [NearbyDeparture], now: Date) -> [NearbyDeparture] {
+        let kept = rows.compactMap { row -> NearbyDeparture? in
+            let times = row.times.filter { isUpcoming($0.at, now: now) }
+            guard !times.isEmpty else { return nil }
+            return NearbyDeparture(route: row.route, agencyId: row.agencyId, direction: row.direction, headsign: row.headsign,
+                                   stopId: row.stopId, distanceM: row.distanceM, times: times)
+        }
+        return kept.enumerated()
+            .sorted { ($0.element.times[0].at, $0.offset) < ($1.element.times[0].at, $1.offset) }
+            .map(\.element)
+    }
+
+    /// Route focus's arrivals without the departed ones.
+    static func arrivals(_ arrivals: [StopArrival], now: Date) -> [StopArrival] {
+        arrivals.filter { isUpcoming($0.predictedArrival, now: now) }
     }
 }
 
@@ -77,7 +129,7 @@ enum ServerErrorText {
 /// Text shown for arrivals, kept out of the views so it can be tested.
 enum ArrivalFormatting {
     /// "Due", "1 min", "12 mins".
-    static func minutesText(until date: Date, now: Date = Date()) -> String {
+    static func minutesText(until date: Date, now: Date) -> String {
         let minutes = Int(date.timeIntervalSince(now) / 60)
         if minutes < 1 { return "Due" }
         if minutes == 1 { return "1 min" }
@@ -85,7 +137,7 @@ enum ArrivalFormatting {
     }
 
     /// "Updated just now", "Updated 12s ago", "Updated 3 min ago".
-    static func updatedText(since date: Date, now: Date = Date()) -> String {
+    static func updatedText(since date: Date, now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 5 { return "Updated just now" }
         if seconds < 60 { return "Updated \(seconds)s ago" }
@@ -118,7 +170,7 @@ enum AccessibilityText {
     }
 
     /// "To Ongar, in 5 minutes, live, 2 minutes late".
-    static func arrival(_ arrival: StopArrival, now: Date = Date()) -> String {
+    static func arrival(_ arrival: StopArrival, now: Date) -> String {
         var parts: [String] = []
         if let headsign = arrival.headsign, !headsign.isEmpty {
             parts.append("To \(headsign)")
@@ -134,17 +186,22 @@ enum AccessibilityText {
             parts.append(minutes == 1 ? "in 1 minute" : "in \(minutes) minutes")
         }
         parts.append(arrival.isLive ? "live" : "scheduled")
-        if arrival.delay > 60 {
-            let late = arrival.delay / 60
-            parts.append(late == 1 ? "1 minute late" : "\(late) minutes late")
+        if arrival.delay >= DepartureFormatting.lateThreshold {
+            parts.append("\(arrival.delay / 60) minutes late") // at least 2, as in the timeline
         }
         return parts.joined(separator: ", ")
     }
 
     /// One label per timeline row: "39A to Ongar from College Green, 90
-    /// metres. Live, 2 minutes, then 14 and 27 minutes."
-    static func departure(_ departure: NearbyDeparture, stopName: String, now: Date = Date()) -> String {
-        let label = "\(departure.route) to \(departure.destination) from \(stopName), \(distance(metres: departure.distanceM)). "
+    /// metres. Live, 2 minutes, then 14 and 27 minutes." A late first time
+    /// adds "…, 2 minutes, 3 minutes late, then …". Without a stop
+    /// name (the stop view's rows): "39A to Ongar. Live, 2 minutes, …"
+    static func departure(_ departure: NearbyDeparture, stopName: String?, now: Date) -> String {
+        var label = "\(departure.route) to \(departure.destination)"
+        if let stopName {
+            label += " from \(stopName), \(distance(metres: departure.distanceM))"
+        }
+        label += ". "
 
         guard let first = departure.times.first else {
             return label + "No times."
@@ -160,6 +217,9 @@ enum AccessibilityText {
             }
         }
         var text = label + "\(source), \(minutesPhrase(until: first.at, now: now))"
+        if let late = DepartureFormatting.lateMinutes(first) {
+            text += ", \(late) minutes late" // at least 2
+        }
 
         let later = departure.times.dropFirst()
         if !later.isEmpty {

@@ -15,4 +15,10 @@ final class TransportModeTests: XCTestCase {
     func testRawValuesMatchServerModeParameter() {
         XCTAssertEqual(TransportMode.allCases.map(\.rawValue), ["bus", "luas", "train"])
     }
+
+    func testNearbyRadius() {
+        XCTAssertEqual(TransportMode.bus.nearbyRadiusMetres, 300)
+        XCTAssertEqual(TransportMode.luas.nearbyRadiusMetres, 800)
+        XCTAssertEqual(TransportMode.train.nearbyRadiusMetres, 800)
+    }
 }

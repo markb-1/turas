@@ -8,14 +8,18 @@ actor TurasServerService {
     private let baseURL: String
     private let apiKey: String
     private let session: URLSession
+    private let clockOffset: ServerClockOffset?
 
     private static let logger = Logger(subsystem: "com.turas", category: "TurasServerService")
 
     /// - Parameter session: injected by tests (a URLProtocol stub); the
     ///   default is an ephemeral session with a 10 second timeout.
-    init(config: ServerConfig, session: URLSession? = nil) {
+    /// - Parameter clockOffset: fed from each successful response's `Date`
+    ///   header; nil records nothing.
+    init(config: ServerConfig, session: URLSession? = nil, clockOffset: ServerClockOffset? = nil) {
         self.baseURL = config.baseURL
         self.apiKey = config.apiKey
+        self.clockOffset = clockOffset
         if let session {
             self.session = session
         } else {
@@ -113,6 +117,24 @@ actor TurasServerService {
         return try ServerJSON.decoder.decode(SearchResponse.self, from: data)
     }
 
+    /// Fetches everything leaving one stop: the rows of the stop view.
+    /// 404 means the stop is not in the timetable.
+    func fetchDepartures(stopId: String) async throws -> StopDepartures {
+        let data = try await get("/api/v1/departures", query: [
+            URLQueryItem(name: "stop_id", value: stopId),
+        ])
+        return try ServerJSON.decoder.decode(StopDepartures.self, from: data)
+    }
+
+    /// Fetches every station of a mode for the map pins. The server
+    /// answers 400 for bus (~10,000 stops; the app uses /nearby instead).
+    func fetchStations(mode: TransportMode) async throws -> [Station] {
+        let data = try await get("/api/v1/stations", query: [
+            URLQueryItem(name: "mode", value: mode.rawValue),
+        ])
+        return try ServerJSON.decoder.decode([Station]?.self, from: data) ?? []
+    }
+
     // MARK: - Private
 
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
@@ -134,8 +156,26 @@ actor TurasServerService {
             throw TurasServerError.httpError(statusCode: httpResponse.statusCode)
         }
 
+        if let clockOffset, let header = httpResponse.value(forHTTPHeaderField: "Date"),
+           let serverDate = Self.parseHTTPDate(header) {
+            clockOffset.record(serverDate: serverDate, deviceDate: Date())
+        }
+
         return data
     }
+
+    /// Parses an HTTP `Date` header ("Sat, 10 Oct 2026 11:00:00 GMT").
+    static func parseHTTPDate(_ string: String) -> Date? {
+        httpDateFormatter.date(from: string)
+    }
+
+    private static let httpDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter
+    }()
 
     /// Builds a request URL, percent-encoding every query value, including
     /// characters URLComponents would otherwise leave alone ("+", "&", "=").
@@ -183,7 +223,17 @@ protocol FocusSource: Sendable {
     func fetchLuasArrivals(stopId: String, direction: Int, routeName: String) async throws -> [StopArrival]
 }
 
-extension TurasServerService: NearbySource, SearchSource, FocusSource {}
+/// Where StopModel gets a stop's departures.
+protocol StopSource: Sendable {
+    func fetchDepartures(stopId: String) async throws -> StopDepartures
+}
+
+/// Where StationStore gets the Luas and train station lists.
+protocol StationSource: Sendable {
+    func fetchStations(mode: TransportMode) async throws -> [Station]
+}
+
+extension TurasServerService: NearbySource, SearchSource, FocusSource, StopSource, StationSource {}
 
 // MARK: - Server JSON Models
 

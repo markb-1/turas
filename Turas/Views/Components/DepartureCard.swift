@@ -1,13 +1,17 @@
 import SwiftUI
 
-/// One timeline row: badge, destination, stop and distance, and the times.
-/// At accessibility type sizes the times move under the text so nothing
-/// truncates.
+/// One departures row: badge, destination, stop and distance, and the
+/// times. In the stop view the stop line is dropped (the header names the
+/// stop). At accessibility type sizes the times move under the text so
+/// nothing truncates.
 struct DepartureCard: View {
     let departure: NearbyDeparture
-    let stopName: String
+    /// The stop under the destination; nil in the stop view.
+    let stopName: String?
     let mode: TransportMode
     let now: Date
+    /// The panel the card is in, for UI tests: "timeline.row" or "stop.row".
+    var identifierPrefix = "timeline.row"
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -35,7 +39,7 @@ struct DepartureCard: View {
         .accessibilityLabel(AccessibilityText.departure(departure, stopName: stopName, now: now))
         .accessibilityHint("Shows this route on the map with its next times")
         .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("timeline.row.\(departure.id)")
+        .accessibilityIdentifier("\(identifierPrefix).\(departure.id)")
     }
 
     private var header: some View {
@@ -45,9 +49,11 @@ struct DepartureCard: View {
                 Text(departure.destination)
                     .font(.body)
                     .foregroundStyle(Theme.ink)
-                Text("\(stopName) · \(DepartureFormatting.distanceText(metres: departure.distanceM))")
-                    .font(.caption)
-                    .foregroundStyle(Theme.muted)
+                if let stopName {
+                    Text("\(stopName) · \(DepartureFormatting.distanceText(metres: departure.distanceM))")
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted)
+                }
             }
         }
     }

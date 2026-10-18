@@ -120,6 +120,9 @@ final class RouteFocusModel: ObservableObject {
         self.headsignLookup = headsignLookup
     }
 
+    /// The time arrivals are formatted against (the injected clock).
+    func now() -> Date { clock.now() }
+
     /// Minutes to walk from the user's location to the highlighted stop.
     var walkingMinutes: Int? {
         guard let userLocation, let stop = highlightedStop else { return nil }

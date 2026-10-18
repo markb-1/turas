@@ -31,7 +31,7 @@ final class NearbyModelsTests: XCTestCase {
         XCTAssertNil(response.stop(withId: "missing"))
 
         let row = try XCTUnwrap(response.departures.first)
-        XCTAssertEqual(row.id, "1|39A|0")
+        XCTAssertEqual(row.id, "1|39A|0|Ongar")
         XCTAssertEqual(row.routeRef, RouteRef(name: "39A", agencyId: "1"))
         XCTAssertEqual(row.headsign, "Ongar")
         XCTAssertEqual(row.destination, "Ongar")
@@ -47,10 +47,19 @@ final class NearbyModelsTests: XCTestCase {
         XCTAssertEqual(row.times[1].at, elevenUTC.addingTimeInterval(14 * 60))
     }
 
-    func testDepartureSourceIsLive() {
-        XCTAssertTrue(DepartureSource.live.isLive)
-        XCTAssertTrue(DepartureSource.realtime.isLive)
-        XCTAssertFalse(DepartureSource.timetable.isLive)
+    func testRowIdentityIncludesHeadsign() throws {
+        // The Luas splits one route and direction by destination: two rows
+        // share route and direction and differ only in headsign.
+        let json = Data("""
+        {"stops": [], "departures": [
+          {"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Tallaght", "stop_id": "L1", "distance_m": 10, "times": []},
+          {"route": "Red", "agency_id": "10000", "direction": 0, "headsign": "Saggart", "stop_id": "L1", "distance_m": 10, "times": []},
+          {"route": "Red", "agency_id": "10000", "direction": 1, "stop_id": "L1", "distance_m": 10, "times": []}
+        ]}
+        """.utf8)
+        let rows = try ServerJSON.decoder.decode(NearbyResponse.self, from: json).departures
+        XCTAssertEqual(rows.map(\.id), ["10000|Red|0|Tallaght", "10000|Red|0|Saggart", "10000|Red|1|"])
+        XCTAssertEqual(Set(rows.map(\.id)).count, rows.count, "ForEach needs a distinct id per row")
     }
 
     func testTolerantDecoding() throws {

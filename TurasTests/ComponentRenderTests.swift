@@ -31,8 +31,13 @@ final class ComponentRenderTests: XCTestCase {
         render(RouteBadge(route: "Green", mode: .luas))
         render(TimeStack(times: departure.times, now: now))
         render(TimeStack(times: [], now: now))
+        let late = DepartureTime(tripId: "l", at: now.addingTimeInterval(120), delay: 240, source: .realtime, cancelled: false)
+        render(TimeStack(times: [late], now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now))
         render(DepartureCard(departure: departure, stopName: "College Green", mode: .bus, now: now).dynamicTypeSize(.accessibility5))
+        render(DepartureCard(departure: departure, stopName: nil, mode: .bus, now: now, identifierPrefix: "stop.row"))
+        render(CentreMarker(isLifted: false))
+        render(CentreMarker(isLifted: true))
         render(StopPin(name: "College Green", showsLabel: true, isHighlighted: true))
         render(ModeTabs(selected: .luas, onSelect: { _ in }))
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: ManualClock().appClock)
@@ -42,10 +47,16 @@ final class ComponentRenderTests: XCTestCase {
         render(StatusBanner(kind: .progress, message: "Turas is starting up…"))
         render(BusAnnotationView(routeId: "DART", bearing: 90, mode: .train))
     }
+    func testTimelineEmptyMessageNamesTheRadius() {
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .bus), "Nothing leaving within 300 m in the next 90 min. Try another mode or move the map.")
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .luas), "Nothing leaving within 800 m in the next 90 min. Try another mode or move the map.")
+        XCTAssertEqual(DepartureTimeline.emptyMessage(for: .train), "Nothing leaving within 800 m in the next 90 min. Try another mode or move the map.")
+    }
+
     func testPanelsRender() async {
         let clock = ManualClock()
         let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
-        render(DepartureTimeline(nearby: nearby, mode: .bus, scrollToRow: .constant(nil), onSelect: { _ in }, onRetry: {}))
+        render(DepartureTimeline(nearby: nearby, mode: .bus, onSelect: { _ in }, onRetry: {}))
 
         let centre = CLLocationCoordinate2D(latitude: 53.34, longitude: -6.26)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
@@ -56,18 +67,43 @@ final class ComponentRenderTests: XCTestCase {
         let focus = RouteFocusModel(target: target, centre: centre, userLocation: nil,
                                     source: FakeFocusSource(), staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
         render(RouteFocusView(focus: focus, onBack: {}))
+        let stop = StopModel(target: StopTarget(SampleData.collegeGreen, mode: .bus), userLocation: nil,
+                             source: FakeStopSource(), clock: clock.appClock)
+        render(StopView(stop: stop, onBack: {}, onSelect: { _ in }))
+        render(RouteFocusView(focus: focus, onBack: {}, backLabel: "Back to stop"))
     }
 
-    func testHomeViewRenders() {
+    func testHomeViewRendersEveryScreen() async {
         let clock = ManualClock()
         let nearby = NearbyModel(source: FakeNearbySource(), clock: clock.appClock)
         let search = SearchModel(source: FakeSearchSource(), places: NoPlaceSearch(), clock: clock.appClock)
         let store = StaticDataStore(source: EmptyStaticSource(), bundledStops: RouteStopService(stopsByRoute: [:]), cacheDirectory: nil, bundledRoutes: { [:] })
-        let model = HomeModel(nearby: nearby, search: search, location: RenderLocation()) { target, centre, userLocation in
+        let model = HomeModel(nearby: nearby, search: search, stations: StationStore(source: FakeStationSource()), location: RenderLocation(), makeFocus: { target, centre, userLocation in
             RouteFocusModel(target: target, centre: centre, userLocation: userLocation, source: FakeFocusSource(),
                             staticData: store, shapes: RouteShapeService(shapes: [:]), clock: clock.appClock, headsignLookup: [:])
-        }
+        }, makeStop: { target, userLocation in
+            StopModel(target: target, userLocation: userLocation, source: FakeStopSource(), clock: clock.appClock)
+        })
+        render(HomeView(model: model)) // timeline: marker, circle, pins
+
+        // A stop reached by search: its highlighted pin is drawn (HomeModelTests cover mapPins).
+        model.openStop(StopTarget(SampleData.taraStreet, mode: .train))
+        await waitUntil { model.stop?.status == .loaded }
+        render(HomeView(model: model)) // stop view
+
+        model.openFocus(departure: model.stop!.departures[0])
+        render(HomeView(model: model)) // focus over the stop view
+        model.closeFocus()
+        model.closeStop()
         render(HomeView(model: model))
+    }
+
+    func testStopViewFooterHidesWhenTheBannerSpeaksForTheRows() {
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .loaded))
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .empty))
+        XCTAssertTrue(StopView.showsUpdatedFooter(for: .starting))
+        XCTAssertFalse(StopView.showsUpdatedFooter(for: .failed(message: "x")), "the banner already says \"Updated N min ago\"")
+        XCTAssertFalse(StopView.showsUpdatedFooter(for: .gone), "no update time under \"no longer in the timetable\"")
     }
 
     func testStopSubtitleShowsModesAndDistanceFromCentre() {
@@ -103,5 +139,6 @@ private final class RenderLocation: LocationProviding {
     var userLocation: CLLocationCoordinate2D? { nil }
     var authorizationStatus: CLAuthorizationStatus { .denied }
     var authorizationStatusPublisher: AnyPublisher<CLAuthorizationStatus, Never> { Just(.denied).eraseToAnyPublisher() }
+    var userLocationPublisher: AnyPublisher<CLLocationCoordinate2D?, Never> { Just(nil).eraseToAnyPublisher() }
     func requestLocation() async -> CLLocationCoordinate2D? { nil }
 }

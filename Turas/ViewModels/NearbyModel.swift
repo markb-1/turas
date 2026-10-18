@@ -53,14 +53,11 @@ final class NearbyModel: ObservableObject {
     }
 
     var departures: [NearbyDeparture] { result?.departures ?? [] }
+    /// The time rows are formatted against (the injected clock).
+    func now() -> Date { clock.now() }
     var stops: [DepartureStop] { result?.stops ?? [] }
     /// Whether the settle timer is running (a fetch will follow).
     var hasPendingFetch: Bool { settleTask != nil }
-
-    /// The first row at a stop; tapping a pin scrolls to it.
-    func firstRow(atStop stopId: String) -> NearbyDeparture? {
-        departures.first { $0.stopId == stopId }
-    }
 
     // MARK: - Camera
 

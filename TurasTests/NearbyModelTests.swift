@@ -30,6 +30,15 @@ final class NearbyModelTests: XCTestCase {
         CLLocationCoordinate2D(latitude: origin.latitude + metresNorth / 111_195, longitude: origin.longitude)
     }
 
+    // MARK: - Clock
+
+    func testNowIsTheInjectedClock() {
+        let model = makeModel(source: FakeNearbySource())
+        XCTAssertEqual(model.now(), clock.now)
+        clock.advance(by: 7)
+        XCTAssertEqual(model.now(), clock.now, "rows format against the clock, not a stale timeline date")
+    }
+
     // MARK: - Settling
 
     func testRapidPanningFetchesOnlyTheFinalCentre() async {
@@ -310,14 +319,6 @@ final class NearbyModelTests: XCTestCase {
         await waitUntil("stale bus error arrived") { source.answers == 2 }
         XCTAssertEqual(model.status, .loaded, "a superseded request's error never shows")
         XCTAssertEqual(model.departures.map(\.route), ["Red"])
-    }
-
-    func testFirstRowAtStop() async {
-        let source = FakeNearbySource()
-        let model = makeModel(source: source)
-        await loadFirst(model, source: source, at: collegeGreen)
-        XCTAssertEqual(model.firstRow(atStop: SampleData.dameStreet.id)?.route, "16")
-        XCTAssertNil(model.firstRow(atStop: "nope"))
     }
 
     func testDistance() {

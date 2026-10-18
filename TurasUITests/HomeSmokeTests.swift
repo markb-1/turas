@@ -1,9 +1,11 @@
 import XCTest
 
-/// Walks the home screen: timeline → Luas and Train tabs → stop search →
-/// route search → route focus → flip → back → a row's focus → place
-/// search, attaching a screenshot at each step. Runs against the in-app stub by default; with
-/// TEST_RUNNER_TURAS_UITEST_LIVE=1 it uses the real server.
+/// Walks the home screen: timeline → Luas and Train tabs → stop search
+/// (opens the stop view) → route search → route focus → flip → back → a
+/// row's focus → place search; and the stop view: a pin → stop view →
+/// row → route focus → back → back, then a Luas station pin. A
+/// screenshot is attached at each step. Runs against the in-app stub by
+/// default; with TEST_RUNNER_TURAS_UITEST_LIVE=1 it uses the real server.
 ///
 /// Before running: set the simulator's location (College Green) and, to
 /// exercise the priming card, reset the app's location permission:
@@ -13,6 +15,9 @@ final class HomeSmokeTests: XCTestCase {
     private var app: XCUIApplication!
     private let live = ProcessInfo.processInfo.environment["TURAS_UITEST_LIVE"] == "1"
     private var timeout: TimeInterval { live ? 30 : 10 }
+
+    /// The stop view's message when nothing is leaving (`StopModel.emptyMessage`).
+    private static let stopEmptyMessage = "Nothing leaving in the next 90 minutes"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -45,10 +50,16 @@ final class HomeSmokeTests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(element("home.priming")), "the priming card goes once location is decided")
     }
 
-    /// Timeline rows (hidden from accessibility while another panel covers them).
-    private var rows: XCUIElementQuery {
-        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'timeline.row.'"))
+    /// Elements whose identifier starts with `prefix`.
+    private func matching(prefix: String) -> XCUIElementQuery {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
     }
+
+    /// Timeline rows (hidden from accessibility while another panel covers them).
+    private var rows: XCUIElementQuery { matching(prefix: "timeline.row.") }
+
+    /// Stop view rows.
+    private var stopRows: XCUIElementQuery { matching(prefix: "stop.row.") }
 
     private func firstRow(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: timeout), "a timeline row appears", file: file, line: line)
@@ -56,9 +67,43 @@ final class HomeSmokeTests: XCTestCase {
     }
 
     private func firstMatch(prefix: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
-        let element = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix)).firstMatch
+        let element = matching(prefix: prefix).firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "\(prefix) result appears", file: file, line: line)
         return element
+    }
+
+    /// A stop pin to tap. Against the stub, the pin of `stubId` (the stub's
+    /// stops are known and placed on screen); live, the first pin that can
+    /// be tapped (on screen, not under the search field).
+    private func pin(stubId: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+        if !live {
+            let pin = element("map.pin.\(stubId)")
+            XCTAssertTrue(pin.waitForExistence(timeout: timeout), "the pin for \(stubId) appears", file: file, line: line)
+            XCTAssertTrue(pin.isHittable, "the pin for \(stubId) is tappable", file: file, line: line)
+            return pin
+        }
+        let pins = matching(prefix: "map.pin.")
+        XCTAssertTrue(pins.firstMatch.waitForExistence(timeout: timeout), "a stop pin appears", file: file, line: line)
+        let pin = pins.allElementsBoundByIndex.first { $0.isHittable } ?? pins.firstMatch
+        XCTAssertTrue(pin.isHittable, "a pin is tappable", file: file, line: line)
+        return pin
+    }
+
+    /// Waits for the stop view's answer and says whether it has rows. The
+    /// stub's stops always do; live, a stop with nothing leaving shows the
+    /// empty message instead, which also counts.
+    private func waitForStopAnswer(_ failure: String, file: StaticString = #filePath, line: UInt = #line) -> Bool {
+        guard live else {
+            XCTAssertTrue(stopRows.firstMatch.waitForExistence(timeout: timeout), failure, file: file, line: line)
+            return true
+        }
+        let rows = stopRows.firstMatch
+        let empty = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", Self.stopEmptyMessage)).firstMatch
+        let answered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in rows.exists || empty.exists }, object: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [answered], timeout: timeout), .completed,
+                       "\(failure), or says nothing is leaving", file: file, line: line)
+        return rows.exists
     }
 
     /// Waits for an element to go (`waitForNonExistence` needs Xcode 16).
@@ -101,14 +146,19 @@ final class HomeSmokeTests: XCTestCase {
         app.buttons["home.tab.bus"].tap()
         _ = firstRow()
 
-        // Stop search: flies the map; the timeline follows.
+        // Stop search: opens the stop view at that stop; back is the timeline.
         // "College Green", not "College": live, the server ranks by name
         // only and "College" puts College Manor, Dundalk first.
         search("College Green")
         let stop = firstMatch(prefix: "search.stop.")
         snapshot("search-stop")
         stop.tap()
+        XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
+        XCTAssertFalse(rows.firstMatch.exists, "the covered timeline is hidden from accessibility")
+        snapshot("stop-from-search")
+        app.buttons["stop.back"].tap()
         _ = firstRow()
+        XCTAssertFalse(element("stop.panel").exists)
         snapshot("after-stop")
 
         // Route search: opens focus.
@@ -135,7 +185,7 @@ final class HomeSmokeTests: XCTestCase {
         _ = firstRow()
 
         // Place search: flies the map. Live, Phoenix Park has nothing
-        // leaving within 500 m, so no rows are expected after it.
+        // leaving within 300 m, so no rows are expected after it.
         search("Phoenix")
         let place = firstMatch(prefix: "search.place.")
         snapshot("search-place")
@@ -143,6 +193,103 @@ final class HomeSmokeTests: XCTestCase {
         XCTAssertTrue(app.textFields["home.search.field"].waitForExistence(timeout: timeout))
         XCTAssertTrue(waitForDisappearance(element("search.results")), "back to the timeline panel")
         snapshot("after-place")
+    }
+
+    func testStopViewFromPinRowFocusAndBack() {
+        app.launch()
+        grantLocationIfAsked()
+        _ = firstRow()
+
+        // A pin opens the stop view; the timeline is covered. Against the
+        // stub, Dame Street: College Green sits under the marker and the
+        // user's dot, and Trinity has nothing leaving.
+        pin(stubId: "8220DB000401").tap()
+        XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
+        XCTAssertTrue(element("stop.name").exists)
+        if !live {
+            XCTAssertEqual(element("stop.name").label, "Dame Street", "the header names the tapped stop")
+            XCTAssertTrue(element("map.pin.8220DB000401").isSelected, "VoiceOver hears the open stop's pin as selected")
+            XCTAssertFalse(element("map.pin.8220DB000400").isSelected, "and no other pin")
+        }
+        XCTAssertFalse(rows.firstMatch.exists, "the covered timeline is hidden from accessibility")
+        let hasRows = waitForStopAnswer("the stop view lists departures")
+        snapshot("stop-view")
+
+        // A row opens route focus; back returns to the stop view, not the timeline.
+        if hasRows {
+            stopRows.firstMatch.tap()
+            XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
+            XCTAssertFalse(stopRows.firstMatch.exists, "the covered stop view is hidden too")
+            snapshot("stop-focus")
+            XCTAssertEqual(app.buttons["focus.back"].label, "Back to stop")
+            app.buttons["focus.back"].tap()
+            XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
+            XCTAssertFalse(element("focus.panel").exists)
+            XCTAssertTrue(stopRows.firstMatch.waitForExistence(timeout: timeout))
+            snapshot("stop-after-focus")
+        }
+
+        // Back again: the timeline.
+        app.buttons["stop.back"].tap()
+        _ = firstRow()
+        XCTAssertFalse(element("stop.panel").exists)
+        snapshot("after-stop-back")
+
+        // Luas: station pins, and a station opens its stop view. Against
+        // the stub, Abbey Street lists both directions.
+        app.buttons["home.tab.luas"].tap()
+        _ = firstRow()
+        let station = pin(stubId: "LUAS-ABB")
+        snapshot("timeline-luas-stations")
+        station.tap()
+        XCTAssertTrue(element("stop.panel").waitForExistence(timeout: timeout))
+        if !live {
+            XCTAssertEqual(element("stop.name").label, "Abbey Street", "the header names the tapped station")
+        }
+        _ = waitForStopAnswer("a Luas stop lists both directions")
+        if !live {
+            XCTAssertEqual(stopRows.count, 2, "Abbey Street lists both directions")
+        }
+        snapshot("stop-luas")
+        app.buttons["stop.back"].tap()
+        _ = firstRow()
+    }
+
+    /// Every time style on screen in light and dark: the bus timeline and the
+    /// College Green stop view (live late, realtime on time and late,
+    /// timetable, cancelled first and later times), then 39A's route focus.
+    /// Stub only: the live server has no guaranteed late or realtime rows.
+    func testTimeStylesInLightAndDark() throws {
+        try XCTSkipIf(live, "needs the stub's late and realtime rows")
+        defer { XCUIDevice.shared.appearance = .light } // the simulator default; .unspecified is refused
+
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            let suffix = appearance == .dark ? "dark" : "light"
+            XCUIDevice.shared.appearance = appearance
+            app.launch()
+            grantLocationIfAsked()
+
+            _ = firstRow()
+            let late = element("timeline.row.1|39A|0|Ongar")
+            // Minutes count down while the test runs, so only the source and the delay are checked.
+            XCTAssertTrue(late.label.contains("Live, ") && late.label.contains(", 3 minutes late"), late.label)
+            let estimated = element("timeline.row.1|15|0|Clongriffin")
+            XCTAssertTrue(estimated.label.contains("Estimated, ") && !estimated.label.contains("late"), estimated.label)
+            snapshot("styles-timeline-\(suffix)")
+
+            search("College Green")
+            firstMatch(prefix: "search.stop.").tap()
+            XCTAssertTrue(stopRows.firstMatch.waitForExistence(timeout: timeout))
+            let stopLate = element("stop.row.1|15|0|Clongriffin")
+            XCTAssertTrue(stopLate.label.contains("Estimated, ") && stopLate.label.contains(", 5 minutes late"), stopLate.label)
+            snapshot("styles-stop-\(suffix)")
+
+            element("stop.row.1|39A|0|Ongar").tap()
+            XCTAssertTrue(element("focus.panel").waitForExistence(timeout: timeout))
+            XCTAssertTrue(firstMatch(prefix: "focus.arrival.").exists)
+            snapshot("styles-focus-\(suffix)")
+            app.terminate()
+        }
     }
 
     func testTimelineAtAccessibilityTextSize() {

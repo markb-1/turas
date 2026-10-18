@@ -108,6 +108,13 @@ final class RouteFocusModelTests: XCTestCase {
         RouteFocusTarget(route: route39A, mode: .bus, direction: direction, headsign: headsign, stop: stop)
     }
 
+    func testNowIsTheInjectedClock() async {
+        let model = makeModel(target: target(stop: nil), staticSource: await staticSource(), shapes: [:])
+        XCTAssertEqual(model.now(), clock.now)
+        clock.advance(by: 7)
+        XCTAssertEqual(model.now(), clock.now)
+    }
+
     // MARK: - Loading
 
     func testLoadsStopsShapeAndHighlightsRequestedStop() async {
