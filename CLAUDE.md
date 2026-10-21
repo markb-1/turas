@@ -16,7 +16,9 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
 
 - `Turas.xcodeproj` is generated and gitignored. Edit `project.yml`, never the project.
 - CI (`.github/workflows/ci.yml`, macos-latest) writes placeholder xcconfig files,
-  runs `xcodegen generate` and `xcodebuild test` on the newest iPhone simulator.
+  runs `xcodegen generate` and `xcodebuild test` on the newest iPhone simulator. It runs
+  once per pull request and again on `main` after a merge (about ten minutes); changes
+  to Markdown and `docs/` alone skip it.
 - Never commit `Configuration/*.xcconfig`: they hold the server URL and API key.
 - `Supporting/Info.plist` is shared by both configurations and has no ATS settings. When
   `TURAS_SERVER_URL` is `http://`, the `Supporting/add-ats-exception.sh` build phase adds

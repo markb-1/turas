@@ -1,8 +1,14 @@
 name: CI
 
+# A pull request runs CI once (pull_request); main runs it again after the
+# merge (push). Changes to Markdown and docs/ alone skip it: a macOS run
+# builds and tests the whole app, which takes about ten minutes.
 on:
   push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
 
 permissions:
   contents: read
