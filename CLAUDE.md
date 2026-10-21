@@ -35,6 +35,17 @@ xcodebuild test -project Turas.xcodeproj -scheme Turas \
 - Some agent environments have no Swift toolchain. If you cannot compile, say so, keep
   changes small and reviewable, and rely on CI.
 
+## Releasing
+
+- **Server:** a merge to turas-server `main` deploys to production automatically (its
+  `.github/workflows/deploy.yml` runs a trial on the VM, swaps the binary in, health-checks
+  it and rolls back on failure). Never copy binaries to the VM by hand. The turas-server
+  README ("Continuous deployment") and CLAUDE.md ("Deploying") have the details.
+- **App:** releases are built from Xcode; there is no app pipeline. Released versions keep
+  calling the production server, so a feature that needs a server change ships in this
+  order: merge the server change (backward compatible) and see its Deploy run go green,
+  copy any changed contract fixtures here, then release the app.
+
 ## Architecture
 
 ```
